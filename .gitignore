@@ -1,0 +1,4 @@
+.DS_Store
+.certora_internal/
+emv-*/
+certora/
