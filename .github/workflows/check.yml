@@ -1,0 +1,251 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner's system python can carry Debian's EXTERNALLY-MANAGED marker,
+      # which makes a plain pip install refuse. A pinned interpreter of our own
+      # avoids depending on which image the runner happens to be.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the linters
+        run: |
+          set -eu
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml 'ruff==0.16.7'
+          command -v shellcheck >/dev/null 2>&1 ||
+            python3 -m pip install --quiet --disable-pip-version-check shellcheck-py
+          shellcheck --version | sed -n 2p
+          ruff --version
+
+      # A clone is all a user gets. Everything the README tells them to run has
+      # to be in it, and install.sh has to be executable in the index.
+      - name: Everything the install routes need is tracked
+        run: |
+          set -eu
+          missing=0
+          for f in install.sh \
+                   scripts/solc_versions.py \
+                   README.md \
+                   AGENTS.md \
+                   LICENSE \
+                   .claude-plugin/plugin.json \
+                   .claude-plugin/marketplace.json \
+                   .agents/plugins/marketplace.json \
+                   skills/certora-verify/SKILL.md; do
+            if [ -z "$(git ls-files -- "$f")" ]; then
+              echo "::error file=$f::$f is not tracked, so a clone will not have it"
+              missing=1
+            else
+              echo "ok  $f"
+            fi
+          done
+          mode=$(git ls-files -s -- install.sh | cut -d' ' -f1)
+          if [ "$mode" != "100755" ]; then
+            echo "::error file=install.sh::install.sh is mode '$mode', and ./install.sh needs 100755"
+            missing=1
+          else
+            echo "ok  install.sh is executable"
+          fi
+          [ "$missing" -eq 0 ]
+
+      - name: Shell scripts parse and lint clean
+        run: |
+          set -eu
+          found=0
+          for s in $(git ls-files '*.sh'); do
+            found=1
+            echo "== $s"
+            bash -n "$s"
+            shellcheck "$s"
+          done
+          if [ "$found" -ne 1 ]; then
+            echo "::error::no shell script is tracked, and install.sh is the product"
+            exit 1
+          fi
+
+      - name: Python scripts compile and lint clean
+        run: |
+          set -eu
+          found=0
+          for f in $(git ls-files '*.py'); do
+            found=1
+            echo "== $f"
+            python3 -m py_compile "$f"
+            ruff check --isolated --select E4,E7,E9,F "$f"
+          done
+          if [ "$found" -ne 1 ]; then
+            echo "::error::no python script is tracked, and install.sh runs scripts/solc_versions.py"
+            exit 1
+          fi
+
+      - name: JSON files are valid
+        run: |
+          set -eu
+          found=0
+          for m in $(git ls-files '*.json'); do
+            found=1
+            echo "== $m"
+            python3 -m json.tool "$m" > /dev/null
+          done
+          if [ "$found" -ne 1 ]; then
+            echo "::error::no JSON file is tracked, and the plugin manifests are required"
+            exit 1
+          fi
+
+      # The manifests restate SKILL.md's own words, and the version string is
+      # written out in five places. This step keeps them from drifting apart.
+      - name: Manifests agree with SKILL.md
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          import yaml
+
+          errors = []
+
+          def check(ok, msg):
+              if not ok:
+                  errors.append(msg)
+
+          def frontmatter(path):
+              """Return a SKILL.md's YAML frontmatter as a mapping, or None."""
+              text = path.read_text(encoding="utf-8")
+              if not text.startswith("---\n"):
+                  return None
+              end = text.find("\n---\n", 3)
+              if end < 0:
+                  return None
+              return yaml.safe_load(text[4:end])
+
+          skills = sorted(pathlib.Path("skills").glob("*/SKILL.md"))
+          check(bool(skills), "no skills/*/SKILL.md found")
+
+          described = {}
+          for skill in skills:
+              fm = frontmatter(skill)
+              if fm is None:
+                  errors.append(f"{skill}: no YAML frontmatter")
+                  continue
+              name = (fm.get("name") or "").strip()
+              desc = (fm.get("description") or "").strip()
+              version = str((fm.get("metadata") or {}).get("version") or "").strip()
+              check(bool(name), f"{skill}: frontmatter has no name")
+              check(name == skill.parent.name,
+                    f"{skill}: name {name!r} does not match directory {skill.parent.name!r}")
+              check(bool(desc), f"{skill}: frontmatter has no description")
+              check(bool(version), f"{skill}: frontmatter has no metadata.version")
+              described[name] = (desc, version)
+              print(f"{skill}: name={name} version={version} description={len(desc)} chars")
+
+          plugin = json.load(open(".claude-plugin/plugin.json"))
+          claude = json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]
+          agents = json.load(open(".agents/plugins/marketplace.json"))["plugins"][0]
+
+          pname = plugin["name"]
+          check(pname in described,
+                f"plugin.json names {pname!r}, which has no skills/{pname}/SKILL.md")
+
+          # The manifest description is a verbatim prefix of the skill's own
+          # description, so a rewrite of SKILL.md that leaves the manifests
+          # behind fails here instead of shipping.
+          skill_desc, skill_version = described.get(pname, ("", ""))
+          pdesc = plugin["description"]
+          diverge = next(
+              (i for i, (a, b) in enumerate(zip(pdesc, skill_desc)) if a != b),
+              min(len(pdesc), len(skill_desc)),
+          )
+          check(skill_desc.startswith(pdesc),
+                "plugin.json description is not a verbatim prefix of the SKILL.md "
+                f"description; they diverge at char {diverge}")
+          check(len(pdesc) >= 120,
+                f"plugin.json description is {len(pdesc)} chars, too short to describe the skill")
+
+          for label, entry in (("claude marketplace", claude), ("agents marketplace", agents)):
+              check(entry["name"] == pname, f"{label}: name {entry['name']!r} != {pname!r}")
+              check(entry["version"] == plugin["version"],
+                    f"{label}: version {entry['version']!r} != {plugin['version']!r}")
+              check(entry["description"] == pdesc,
+                    f"{label}: description does not match plugin.json")
+
+          check(claude["source"] == "./", f"claude marketplace: source {claude['source']!r} != './'")
+          check(agents["source"] == {"source": "local", "path": "./"},
+                f"agents marketplace: source {agents['source']!r} is not the local './' form")
+
+          # Version lives in five places. All five, or none of them, are true.
+          readme = pathlib.Path("README.md").read_text(encoding="utf-8")
+          badge = re.search(r"img\.shields\.io/badge/version-([0-9A-Za-z.+-]+?)-", readme)
+          check(badge is not None, "README.md has no version badge")
+          versions = {
+              "plugin.json": plugin["version"],
+              "claude marketplace": claude["version"],
+              "agents marketplace": agents["version"],
+              f"skills/{pname}/SKILL.md": skill_version,
+              "README.md badge": badge.group(1) if badge else None,
+          }
+          check(len(set(versions.values())) == 1, f"version strings disagree: {versions}")
+
+          licence = "GPL-3.0-only"
+          check(plugin["license"] == licence, f"plugin.json license is {plugin['license']!r}")
+          check(claude["license"] == licence, f"claude marketplace license is {claude['license']!r}")
+          text = pathlib.Path("LICENSE").read_text(encoding="utf-8")
+          check("GNU GENERAL PUBLIC LICENSE" in text and "Version 3" in text,
+                "LICENSE is not the GPL version 3 text")
+
+          if errors:
+              sys.exit("\n".join(f"::error::{e}" for e in errors))
+          print(f"manifests agree: {pname} {plugin['version']} {licence}, "
+                f"description {len(pdesc)} of {len(skill_desc)} chars")
+          PY
+
+      # --self-test is the installer's own offline suite: pure functions plus
+      # the argument-error paths, which exit before the first network call.
+      # unshare -rn leaves it no route out, and the throwaway HOME is diffed
+      # afterwards, so a side effect or a stray download fails the step.
+      - name: install.sh self-test, offline and without side effects
+        run: |
+          set -eu
+          root="$PWD"
+          fake_home="$(mktemp -d)"
+          before="$(mktemp)"
+          after="$(mktemp)"
+          find "$fake_home" | sort > "$before"
+
+          offline() {
+            if unshare -rn true 2>/dev/null; then
+              unshare -rn env HOME="$fake_home" "$@"
+            else
+              echo "note: no network namespace here, running with the network up"
+              env HOME="$fake_home" "$@"
+            fi
+          }
+
+          echo "== --self-test"
+          offline "$root/install.sh" --self-test
+
+          echo "== the plan, with no toolchain and no agent config"
+          offline "$root/install.sh" --dry-run --yes --target agents --skill-only
+
+          find "$fake_home" | sort > "$after"
+          if ! diff "$before" "$after"; then
+            echo "::error file=install.sh::install.sh wrote into HOME"
+            exit 1
+          fi
+          echo "HOME is untouched"
