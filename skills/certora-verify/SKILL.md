@@ -1,6 +1,16 @@
 ---
 name: certora-verify
-description: End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL while consulting the official docs at https://docs.certora.com/en/latest/, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report. Use this whenever the user wants to formally verify a Solidity contract, prove properties about a contract, or generate CVL specs/rules/invariants and check them with the prover — e.g. "formally verify src/Vault.sol:Vault", "come up with properties for this contract and prove them", "write a Certora spec for X and run it". Also use it when the user asks to "audit contract X with the prover" or wants machine-checked guarantees rather than a manual review.
+description: End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report. Use this whenever the user wants to formally verify a Solidity contract, prove properties about a contract, or generate CVL specs/rules/invariants and check them with the prover — e.g. "formally verify src/Vault.sol:Vault", "come up with properties for this contract and prove them", "write a Certora spec for X and run it". Also use it when the user asks to "audit contract X with the prover" or wants machine-checked guarantees rather than a manual review.
+license: GPL-3.0-only
+compatibility: >-
+  Requires certoraRun (certora-cli) and certora-autosetup on PATH, a CERTORAKEY for the
+  Certora cloud prover, Java 19+, network access to prover.certora.com and
+  docs.certora.com, and the solc compilers the target project's pragmas require, managed by
+  solc-select with its artifact directories on PATH. No Anthropic key is needed: autosetup
+  runs with --skip-llm, and the variable it checks at import takes a placeholder.
+metadata:
+  version: "0.1.0"
+  author: certora
 ---
 
 # certora-verify
@@ -24,12 +34,12 @@ A verdict of VIOLATED comes with a concrete **counterexample** (a call trace). D
 
 **Two prime directives:**
 
-1. Your sole *authoritative* sources on CVL syntax and prover behavior are the official docs at https://docs.certora.com/en/latest/ and the bundled references. Do NOT assume the prover works some way because it is "intuitive" — fetch the relevant docs page and check (`references/cvl-writing.md` has the page map).
+1. Your sole *authoritative* sources on CVL syntax and prover behavior are the official docs at https://docs.certora.com/en/latest/ and the bundled references. Do NOT assume the prover works some way because it is "intuitive" — retrieve the relevant docs page and check (`references/cvl-writing.md` has the page map and says how to retrieve a page with or without a web-fetch tool).
 2. Do not reason yourself into whether a property is true — author CVL that lets the *prover* demonstrate it.
 
 ## Inputs, artifacts, resume
 
-**Inputs**: a project root (Foundry or Hardhat), a main contract as `relative/path/File.sol:ContractName`, optionally a design document. Track phases with the task list — one task per phase.
+**Inputs**: a project root (Foundry or Hardhat), a main contract as `relative/path/File.sol:ContractName`, optionally a design document. Track the phases explicitly — one entry per phase in whatever task list or plan your agent keeps, marked done as you leave each phase; if it keeps none, state which phase you are entering each time you start one.
 
 Every phase writes its result under the project's `certora/` directory, so an interrupted run resumes by reusing artifacts whose inputs haven't changed (check before redoing work, and say when you reuse):
 
@@ -40,20 +50,86 @@ Every phase writes its result under the project's `certora/` directory, so an in
 | `certora/confs/<Main>.conf`, `certora/specs/summaries/…`, `certora/specs/sanity-<Main>.spec` | Phase 3 (autosetup) |
 | `certora/properties/<slug>.properties.json` | Phase 4 |
 | `certora/specs/invariants.spec` + `certora/confs/invariants.conf` | Phase 5 |
-| `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md` | Phase 6 |
+| `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md`, `certora/properties/<slug>.judge-round<N>.md` | Phase 6 |
 | `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
 
-Create the artifact directories up front so writes and `tee` don't fail on a missing parent: `mkdir -p certora/{analysis,confs,specs/summaries,properties,report,logs}`.
+Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
-Long-running commands (autosetup, and every full certoraRun) take tens of minutes to ~2h — longer than a foreground tool call may run. **Run them in the background**, redirect to a log file under `certora/logs/`, and poll the log; never block on them and never re-run one just to see more output. (Piping through `tee` still works, but the background handle is what lets you keep working while it runs.) While waiting, **emit a short progress note each time you poll** (elapsed time + the last log line) — a harness may kill an agent that produces no output for several minutes, so a single long silent wait can lose the run even though the background job is fine.
+Long-running commands (autosetup, and every full certoraRun) take tens of minutes to ~2h, longer than a single foreground command should hold your session. **Start them detached and poll their log.** The portable formulation needs nothing but a shell:
+
+```bash
+nohup <command> > certora/logs/<name>.log 2>&1 &
+echo $! > certora/logs/<name>.pid
+```
+
+Read progress with `tail -n 20 certora/logs/<name>.log`, and check liveness with `kill -0 $(cat certora/logs/<name>.pid)` (exit 0 = still running). If your agent has its own background-execution facility, use that instead; it amounts to the same thing, and a log file plus a PID is the fallback when it doesn't. Never block a single command on a whole run, and never re-run one just to see more output. While waiting, **emit a short progress note each time you poll** (elapsed time + the last log line): an agent runtime may cut off a session that goes several minutes without output, so one long silent wait can lose the run even though the detached job is fine.
 
 ## Phase 0 — Preflight
 
 This skill is standalone: it needs nothing beyond the tools below. Fail fast with a specific message rather than improvising around a broken environment:
 
-- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is a separate Certora tool that is NOT bundled with certora-cli and has no standalone pip package — if it's missing, stop and tell the user to obtain it from Certora. Do not substitute or hand-roll a setup.
-- `ANTHROPIC_API_KEY` set (autosetup makes internal LLM calls) and `CERTORAKEY` set (cloud prover).
-- The solc compiler(s) the project needs are on PATH under the `solcX.Y` naming convention. Determine the required version(s) from the project's `pragma solidity` statements and any `solc`/`solc_version` setting in `foundry.toml`/hardhat config, then check that each corresponding `solcX.Y` binary exists (e.g. a `pragma solidity ^0.8.29` project needs `solc8.29`). Don't assume a fixed version.
+- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both, though only one of them lands on PATH: the `certora-cli` extra installs `certoraRun` into the same tool environment, and `uv tool install` links the console scripts of the package you named, not those of its dependencies.
+
+  ```bash
+  GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
+  GIT_CONFIG_VALUE_0='git@github.com:' \
+  uv tool install --python 3.12 \
+    'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@e6f9e2e4706225adb07178c1866ad61b4d827424'
+  ```
+
+  The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key. The ref is pinned because this skill describes autosetup flags and behaviour that move with it; this repo's `install.sh` carries the same pin and takes `--autoprover-ref` to override it.
+
+  Then re-run `which certoraRun certora-autosetup`. If `certoraRun` is missing, link it out of the environment the extra installed it into:
+
+  ```bash
+  tooldir=$(uv tool dir)/ai-composer
+  for c in "$tooldir"/bin/certora*; do ln -sfn "$c" "$(uv tool dir --bin)/$(basename "$c")"; done
+  ```
+
+  If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
+- `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make (`setup_prover.py:1526` sets `enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it).
+
+  autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key (`certora_autosetup/setup/setup_summaries.py:70-93`); a `.env` in the working directory is loaded instead and then nothing is checked at all. So export a placeholder for the import and move on:
+
+  ```bash
+  export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-skip-llm-placeholder}"
+  ```
+
+  What the default costs: summaries for library and external functions are static only, so the ones that are hard to summarize statically get none, and specs that lean on them are weaker. If the user has a real Anthropic key and wants those summaries, drop `--skip-llm` and say that the run will make LLM calls they pay for. Ask first; never spend their key by default.
+- Java 19+ on PATH (`java -version`). autosetup shells out to the `ASTExtraction.jar` typechecker while resolving summaries and there is no fallback path, so an old or absent JDK fails mid-run rather than at startup.
+- The solc compilers the project needs are on PATH, managed by [solc-select](https://github.com/crytic/solc-select). A project routinely needs several at once, because autosetup emits a `compiler_map` pinning contracts to different compilers, so `solc-select use` alone is not enough: the versions have to be reachable by name at the same time.
+
+  solc-select keeps every release in its own directory as a binary named after it, `~/.solc-select/artifacts/solc-0.8.29/solc-0.8.29`. Those directories on PATH give you `solc-0.8.29` and friends, which is the naming autosetup switches to when it sees it (`certora_autosetup/fixconf_prechecks.py:168-210` picks solc-select naming over the Certora `solc8.29` form when the solc-select names are on PATH and the Certora ones are not).
+
+  Start from what this project asks for: its `pragma solidity` statements plus any `solc` / `solc_version` / `solc-version` key in `foundry.toml` or the hardhat config, each resolved to the concrete release it admits. A version that isn't there yet is something to provision, not a reason to stop:
+
+  ```bash
+  uv tool install solc-select          # only if solc-select is not on PATH yet
+
+  # solc-select redirects its whole store into an active virtualenv, where nothing else
+  # looks, so run it with VIRTUAL_ENV out of the way.
+  env -u VIRTUAL_ENV solc-select install 0.8.29 0.7.6
+
+  # Each release lives in its own directory as a binary of the same name, so this puts
+  # every installed version on PATH at once, which is what a compiler_map needs.
+  for d in "$HOME"/.solc-select/artifacts/*/; do PATH="$PATH:${d%/}"; done
+  export PATH
+  ```
+
+  This skill's `install.sh` does exactly that, and downloads no compiler by default: versions arrive through `./install.sh --solc "0.8.29 0.7.6"` or `./install.sh --project <path>`. Either way, check the versions you derived above by name, which is this bullet's pass/fail gate:
+
+  ```bash
+  missing=""
+  for n in solc-0.8.29 solc-0.7.6; do command -v "$n" >/dev/null 2>&1 || missing="$missing $n"; done
+  [ -z "$missing" ] && echo "all compilers present" || echo "missing:$missing"
+  ```
+
+  A non-empty `missing` after an install attempt is the fail-fast case: name the absent compilers and stop, rather than starting a run that dies in compilation.
+
+  autosetup falls back to a bare `solc` when a pinned compiler is missing, and that name belongs to solc-select's shim, which raises until a version is selected. If you need the fallback, ask the user before running `solc-select use <version>`: it changes a global setting that their other tools share.
+
+  Never assume a fixed version, and never point the conf's `solc` or `compiler_map` at an absolute path: autosetup reads the compiler's version out of the *name*, so an absolute path leaves it unable to check pragmas, plan a fallback, or generate library harnesses. On Apple silicon 0.8.5 and up are native or universal binaries; below 0.8.5 they are Intel-only and need Rosetta 2, which is the user's call and not yours: stop and ask them to run `softwareupdate --install-rosetta`, which prompts for a license and for admin rights.
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
 
 ## Phase 1 — Design document (optional but valuable)
@@ -81,22 +157,23 @@ First decide the **scene** (which contracts the prover must model):
 - Classify each closure contract: a bog-standard ERC20 → note as ERC20 (the setup models tokens with dummy mocks); a meaningful ERC20 *extension* → keep as a real contract.
 - The prover instantiates exactly **one** instance per contract declaration. If meaningful verification requires ≥2 instances of one contract, write minimal harnesses `contract XInstance1 is X {}` under `certora/harnesses/` and add them to the scene. Usually not needed — skip unless the protocol's core state genuinely spans multiple instances.
 
-Record the closure in `certora/analysis/closure.json`. Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **in the background** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
+Record the closure in `certora/analysis/closure.json`. Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **detached** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
 
 ```bash
 cd <project_root>
-certora-autosetup --main-contract <rel_path>:<Main> \
-  <rel_path>:<Main> <closure .sol files...> --no-strip-contracts \
-  > certora/logs/autosetup.log 2>&1
+nohup certora-autosetup --main-contract <rel_path>:<Main> \
+  <rel_path>:<Main> <closure .sol files...> --no-strip-contracts --skip-llm \
+  > certora/logs/autosetup.log 2>&1 &
+echo $! > certora/logs/autosetup.pid
 ```
 
-Poll `certora/logs/autosetup.log` for progress. Below, `<Main>` is the main contract's name. Its deliverables are the foundation for everything after:
+Poll it with `tail -n 20 certora/logs/autosetup.log`, reporting the elapsed time and the last line each time, until the process exits (`kill -0 $(cat certora/logs/autosetup.pid)` fails). `--skip-llm` is the default here, so the summaries are static-only: carry that into the report's confidence notes in Phase 7. Drop the flag only when the user has an Anthropic key and has agreed to the LLM calls it bills for. Below, `<Main>` is the main contract's name. Its deliverables are the foundation for everything after:
 
 - `certora/confs/<Main>.conf` — a working prover conf (files, compiler settings, `loop_iter`, hashing bounds). Note: contract *links* are NOT in the conf — they live as a CVL `links` block inside the call-resolution spec below.
 - `certora/specs/summaries/<Main>_base_summaries.spec` AND `certora/specs/summaries/<Main>_call_resolution.spec` — generated summaries plus the links/DISPATCHER resolution. Every spec you write MUST import BOTH (copy the import lines verbatim from the top of `sanity-<Main>.spec`, which also cover `erc7201.spec` when present). Importing only the base summaries silently drops every link, and calls that sanity resolved will havoc in your rules.
 - `certora/specs/sanity-<Main>.spec` — a parametric reachability rule proving every external method can execute end-to-end under this setup. A method failing sanity means the setup can't verify that method; investigate before writing specs.
 
-If autosetup fails, read the log tail and fix the underlying issue (missing solc, abstract main contract, stale caches — see the reference) instead of retrying blindly.
+If autosetup fails, read the log tail and fix the underlying issue (a solc version not provisioned yet, abstract main contract, stale caches — see the reference) instead of retrying blindly.
 
 ## Phase 4 — Property formulation (per main-contract component)
 
@@ -116,38 +193,58 @@ Additionally formulate **structural invariants** for the main contract as their 
 
 ## Phase 5 — CVL: structural invariants first
 
-Formalize the structural-invariants batch into `certora/specs/invariants.spec` (conf `certora/confs/invariants.conf`) using the Phase 6 Generator + Judge procedure as a **single batch** — one generator produces it, one judge reviews, ping-ponging until the judge accepts and the invariants verify. Do this batch FIRST and to completion: component specs then `import` it and `requireInvariant` its invariants as preconditions, and Phase 6's barrier housekeeping re-runs this same gate whenever a component asks to add an invariant to the file.
+Formalize the structural-invariants batch into `certora/specs/invariants.spec` (conf `certora/confs/invariants.conf`) using the Phase 6 Generator + Judge procedure for a **single batch**: one generation pass produces it, one judging pass reviews, ping-ponging until the judge accepts and the invariants verify (in either of Phase 6's execution modes). Do this batch FIRST and to completion: component specs then `import` it and `requireInvariant` its invariants as preconditions, and Phase 6's barrier housekeeping re-runs this same gate whenever a component asks to add an invariant to the file.
 
 ## Phase 6 — CVL generation + prover loop (batched ping-pong across components)
 
-Each component gets one spec `certora/specs/<slug>.spec` + conf `certora/confs/<slug>.conf` covering all its properties. You are the **orchestrator**: you never author or judge in your own context — you run rounds of two barrier-synchronized subagent batches. This keeps authoring parallel *and* review adversarial, and it respects the one-level nesting limit (a subagent cannot spawn a subagent, so both batches must be spawned by you).
+Each component gets one spec `certora/specs/<slug>.spec` + conf `certora/confs/<slug>.conf` covering all its properties. You are the **orchestrator**: generation and judging are separate passes, and a spec is never judged inside the pass that wrote it.
+
+How you execute those roles depends on what your agent can do:
+
+- **Parallel mode**: your agent can spawn sub-agents that run with their own context and hand a result back. Each round is two barrier-synchronized batches, both spawned by you: assume a sub-agent cannot spawn sub-agents, so a generator must never try to spawn its own judge. This keeps authoring parallel *and* review adversarial, and it is the mode the flow is designed around. Use it whenever you have the primitive.
+- **Sequential mode**: your agent has no sub-agent primitive. Run the identical loop one component at a time, under the discipline in *Sequential mode* below, which reconstructs the generator/judge separation inside a single context. It is slower and its review is weaker, but no step is dropped: the judging pass and the prover gate both still run.
+
+The loop, the artifacts, the barrier rule for `invariants.spec`, the round cap and the completion gate are identical in both modes; only how each pass is run differs.
 
 ### The ping-pong loop
 
 Keep a set of **open** components (initially all of them). Each round:
 
-1. **Generate** — spawn one *generator* subagent per open component, all in parallel, and **wait for the whole batch** before continuing. Give each generator: its component's property list, the relevant contract source, the exact import lines to copy from `sanity-<Main>.spec`, `references/cvl-writing.md` + `references/cvl-pitfalls.md`, and — on rounds after the first — its previous spec plus the judge feedback that rejected it. It runs the **Generator procedure** below and returns: the spec + `property_rules.json` it wrote, its full prover status, any structural-invariant requests, and notes.
-2. **Barrier housekeeping** — if any generator asked for a new structural invariant, add it to the shared `certora/specs/invariants.spec` **yourself now** (generators must never write that file — every component imports it, so parallel writes would race), re-verify it with the Phase 5 gate, and only then proceed, so the next batch imports a consistent, proven file.
-3. **Judge** — spawn one *judge* subagent per component that a generator just produced, all in parallel, and **wait for the whole batch**. Give each judge the **Judge inputs** below; each returns accept / reject + concrete feedback.
+1. **Generate** — run one *generator* per open component. In parallel mode, spawn them all at once and **wait for the whole batch** before continuing; in sequential mode, work through the open components one after another until each has a fresh spec. Give each generator: its component's property list, the relevant contract source, the exact import lines to copy from `sanity-<Main>.spec`, `references/cvl-writing.md` + `references/cvl-pitfalls.md`, and — on rounds after the first — its previous spec plus the judge feedback that rejected it. It runs the **Generator procedure** below and produces: the spec + `property_rules.json` it wrote, its full prover status, any structural-invariant requests, and notes.
+2. **Barrier housekeeping** — if any generator asked for a new structural invariant, add it to the shared `certora/specs/invariants.spec` **yourself now**, at the barrier: after all generation for the round, before any judging (a generator never writes that file: every component imports it, so an edit inside the generation window either races a parallel generator or silently changes the file underneath a spec that was already judged), re-verify it with the Phase 5 gate, and only then proceed, so the next round of generation imports a consistent, proven file.
+3. **Judge** — run one *judge* per component that a generator just produced. In parallel mode, spawn the batch and **wait for all of it**; in sequential mode, judge each component in turn under the discipline in *Sequential mode* below. Give each judge the **Judge inputs** below; each produces accept / reject + concrete feedback, written to `certora/properties/<slug>.judge-round<N>.md` in both modes, before any fix is applied.
 4. **Partition** — a component *leaves* the open set only when, this round, its judge **ACCEPTED** the produced spec **and** that generator's full unfiltered prover run was clean (every rule VERIFIED or expected-to-fail). Everything else stays open, carrying its judge feedback into the next Generate. Regenerate and re-judge **only** the still-open components.
 5. Repeat until the open set is empty (convergence) — or a component hits the per-component round cap (below), which closes it via the deadlock rule.
 
-Because the batches are synchronized but the open set shrinks, a component that converges in round 1 is done while slower siblings keep ping-ponging; you only re-spawn work for what remains open.
+Because rounds are synchronized but the open set shrinks, a component that converges in round 1 is done while slower siblings keep ping-ponging; you only redo work for what remains open.
 
-### Generator procedure (each generator subagent)
+### Sequential mode (no sub-agents)
 
-Consult the docs pages while authoring — particularly Methods Block/summaries, Invariants, Rules — rather than guessing syntax.
+Without a sub-agent primitive you play both roles yourself, one component at a time. The loop, the artifacts, the round cap and the completion gate are unchanged; what has to be manufactured is the separation between authoring and reviewing.
+
+1. Work the open components in a fixed order. For each, run the **Generator procedure** to completion (spec, `property_rules.json`, commentary, prover status) and write all of it to disk before starting the next component.
+2. Judge only once every open component has been regenerated. That preserves the round boundary, and with it the rule that `certora/specs/invariants.spec` changes only at the barrier: after all generation for the round, before any judging.
+3. Judge from the files, not from memory. Re-read the spec, the contract source, the property list and the recorded prover status as if someone else had written them; take the **Judge inputs** below as your entire brief; and write the verdict to `certora/properties/<slug>.judge-round<N>.md`, naming each of the 8 criteria with either a concrete finding or an explicit "no issue", **before** you apply a single fix. A verdict that is not on disk before the fix does not count, and an accept whose file does not address all 8 criteria does not close the component.
+4. If your agent can start a second session against the same working tree (a fresh conversation, a separate process, a colleague's run), do the judging there. The review is only as adversarial as the context is fresh, and a genuinely new context is the closest sequential substitute for a judge sub-agent.
+
+Phase 5 works the same way: one generation pass over `invariants.spec`, then a fresh-context judging pass with the same written-verdict rule.
+
+Say plainly to the user that you are in sequential mode, because self-review is its weak point: the context that chose a summary is the context least likely to reject it, so expect fewer rejections than a separate judge would produce, and treat a component that closes on round 1 with suspicion. Two things keep the mode honest: the written verdict, and the prover half of the completion gate (a full unfiltered run with every rule VERIFIED or explicitly expected-to-fail), which is unaffected by execution mode. Neither may be relaxed to make sequential mode faster.
+
+### Generator procedure (the generator role)
+
+Consult the docs pages while authoring — particularly Methods Block/summaries, Invariants, Rules — rather than guessing syntax; `references/cvl-writing.md` maps the pages and gives the retrieval recipe for an agent with no web-fetch tool.
 
 - Give each property its own rule(s)/invariant(s), formalized in the **"VERIFIED = good"** direction from Phase 4.
-- Import the setup's summary specs — base summaries AND call resolution, copied verbatim from the sanity spec's import lines (required) — and `invariants.spec` when useful. If you find you need a structural invariant that isn't in `invariants.spec`, do NOT edit that file; record a request and return it (the orchestrator adds it between rounds).
+- Import the setup's summary specs — base summaries AND call resolution, copied verbatim from the sanity spec's import lines (required) — and `invariants.spec` when useful. If you find you need a structural invariant that isn't in `invariants.spec`, do NOT edit that file; record a request and hand it over. The request is applied to `invariants.spec` at the barrier, after all generation for the round and before any judging, never by the generator itself.
 - Build the `property_rules` mapping (every non-skipped property title → the rule/invariant name(s) that verify it) and persist it to `certora/properties/<slug>.property_rules.json` — it gates completion and feeds the report, so it must survive a restart.
 - Typecheck first: `certoraRun <conf> --compilation_steps_only` (fast ~1 min); fix all type/parse errors before anything else (the judge assumes the spec typechecks).
 - Then prove: build the conf as the setup base plus the overlay defined in `references/prover-loop.md` (single source of truth for the overlay; it includes `wait_for_results: "all"`, load-bearing because the base conf ships `wait_for_results: none`). Run certoraRun (mechanics, status parsing, counterexample extraction all in that reference). For each non-verified rule, analyze the trace, classify the root cause, and apply the remediation playbook there: missing-invariant `requireInvariant`, sound summaries for havocs (never `NONDET` on side-effecting functions, never `persistent` ghosts to dodge a havoc), `filtered` blocks at ~95% certainty, expected-failure for a rule that exposes a genuine bug OR that fails only due to an exhausted prover limitation (record which), skip for genuinely-invalid properties, contradictory-`require` hunt for sanity failures.
-- Iterate write→prove yourself until the full unfiltered run is clean (all VERIFIED or expected-to-fail) or you've exhausted principled fixes. Write the per-component commentary (`certora/properties/<slug>.commentary.md`). **Return** the final spec, `property_rules`, the full prover status (including expected-fail markings + reasons), and any structural-invariant requests — then stop; do not attempt to review your own work.
+- Iterate write→prove yourself until the full unfiltered run is clean (all VERIFIED or expected-to-fail) or you've exhausted principled fixes. Write the per-component commentary (`certora/properties/<slug>.commentary.md`). **Hand over** the final spec, `property_rules`, the full prover status (including expected-fail markings + reasons), and any structural-invariant requests, then stop generating and let the judging pass take over; generation never reviews its own work in the same pass.
 
-### Judge inputs (each judge subagent)
+### Judge inputs (the judge role)
 
-A fresh adversarial reviewer. Give it: the spec text, the contract source for the component, the property list, the generator's prover status (so it doesn't flag intended expected-fails — criterion 6), **and both the 8-criteria Judge checklist AND the 23 CVL guidelines from `references/cvl-writing.md`** (criterion 2 checks against those guidelines; criteria 3/6/7 need the source). It returns accept / reject + concrete feedback. A generator may rebut prior feedback on its next round, but only with hard evidence (a typecheck error, a persistent counterexample, a docs citation) — a rebuttal is not a get-out-of-jail-free card.
+A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-context review pass in sequential mode. Give it: the spec text, the contract source for the component, the property list, the generator's prover status (so it doesn't flag intended expected-fails — criterion 6), **and both the 8-criteria Judge checklist AND the 23 CVL guidelines from `references/cvl-writing.md`** (criterion 2 checks against those guidelines; criteria 3/6/7 need the source). It produces accept / reject + concrete feedback, on disk before anyone acts on it. A generator may rebut prior feedback on its next round, but only with hard evidence (a typecheck error, a persistent counterexample, a docs citation) — a rebuttal is not a get-out-of-jail-free card.
 
 ### Per-component round cap / deadlock
 
@@ -164,6 +261,6 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Per property: title, sort, description, component, the rules that formalize it, and each rule's outcome mapped to GOOD (verified) / BAD (violated) / ERROR / TIMEOUT / UNKNOWN, plus the prover run link.
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
-- Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`).
+- Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only).
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.

@@ -2,3 +2,5 @@
 .certora_internal/
 emv-*/
 certora/
+__pycache__/
+*.pyc
