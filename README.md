@@ -391,6 +391,7 @@ skills/certora-verify/
     cvl-writing.md            docs map, writing guidelines, judge checklist
     cvl-pitfalls.md           traps that aren't on any single docs page
     prover-loop.md            building confs, running certoraRun, reading results
+    timeout-resolver.md       handing a timed-out rule to the hosted timeout resolver
   evals/evals.json            dev-time eval set for skill authoring
 ```
 

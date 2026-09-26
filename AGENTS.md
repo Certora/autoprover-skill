@@ -14,12 +14,13 @@ contract X with the prover", "write a Certora spec for X and run it".
 ## What to read
 
 `skills/certora-verify/SKILL.md` is the flow of record: phases 0-7. Read it in full before
-acting. It names four references, each read when its phase needs it:
+acting. It names five references, each read when its phase needs it:
 
 - `skills/certora-verify/references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
 - `skills/certora-verify/references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
 - `skills/certora-verify/references/cvl-pitfalls.md`, prover traps that are on no single docs page
 - `skills/certora-verify/references/prover-loop.md`, building confs, running `certoraRun`, reading results
+- `skills/certora-verify/references/timeout-resolver.md`, handing a timed-out rule to the hosted timeout resolver and applying what it returns
 
 `skills/certora-verify/evals/evals.json` is a dev-time eval set for working on the skill, not
 part of running it. Two of its three evals submit real cloud prover jobs and cost money.
