@@ -58,8 +58,7 @@ RECOMMENDED_JAVA_MAJOR=21
 AUTOSETUP_DEFAULT_SOLC="0.8.34"
 
 # Where the installer keeps its own files: the state file --uninstall reads, and
-# a snapshot of this script, so a later --solc-only run works even if the
-# checkout it was installed from has moved.
+# what it installed, so --uninstall removes exactly that and nothing else.
 STATE_DIR="$HOME/.certora/certora-verify"
 STATE_FILE="$STATE_DIR/install-state"
 
@@ -218,7 +217,7 @@ What it writes, and nothing else:
   the toolchain:      \$(uv tool dir) and \$(uv tool dir --bin), where uv keeps its tools
   uv's own trees:     \$HOME/.cache/uv, and the managed CPython under \$HOME/.local/share/uv
   uv itself:          \$HOME/.local/bin, if you let it install uv
-  its own state:      $STATE_DIR   (the state file and a snapshot of this script)
+  its own state:      $STATE_DIR   (the state file recording what it installed)
   the skill:          the agent skill directories it names before it writes them
 
 --project reads your project and writes nothing into it: autosetup's resolver logs
@@ -305,7 +304,7 @@ parse_args() {
 # that can read a text file: --uninstall reads it back, and the skill reads it to
 # find out where the commands and the compilers ended up. Scalar keys are
 # overwritten on each run; list keys accumulate.
-STATE_SCALARS="VERSION INSTALLED_AT AUTOPROVER_REF UV_BIN_DIR CLI_BIN_DIR SOLC_STORE SKILL_SRC SNAPSHOT ANTHROPIC_MODE UV_INSTALLED"
+STATE_SCALARS="VERSION INSTALLED_AT AUTOPROVER_REF UV_BIN_DIR CLI_BIN_DIR SOLC_STORE SKILL_SRC ANTHROPIC_MODE UV_INSTALLED"
 STATE_NEW=""
 STATE_KEYS=""
 
@@ -881,7 +880,6 @@ install_solc() {
     record_done "solc-select (no compiler requested)"
   fi
 
-  install_state_snapshot
   report_solc_path
 }
 
@@ -1205,7 +1203,7 @@ uninstall() {
   # before the plan is built.
   adopt_uv || true
 
-  local dest mode key src target bin snapshot tools t rc rcline
+  local dest mode key src target bin tools t rc rcline
   UNINSTALL_LEFT=0
 
   step "Uninstall plan"
@@ -1220,8 +1218,6 @@ uninstall() {
     say "    certora-cli command: $dest"
   done
 
-  snapshot=$(state_value SNAPSHOT)
-  [ -z "$snapshot" ] || say "    the installer snapshot: $snapshot"
   tools=$(state_values UV_TOOL | sort -u | tr '\n' ' ')
   [ -z "$tools" ] || say "    uv tools: $tools"
   state_values PATH_RC | while IFS='|' read -r rc rcline; do
@@ -1412,8 +1408,27 @@ check_eq() {
 
 # Runs offline: every case is either a pure function or an argument-parsing
 # path that exits before the first network call, which is what lets CI run it.
+# Every command word this script uses has to resolve: a function it defines, a
+# builtin, or something on PATH. A call left behind when its definition is
+# deleted resolves to nothing, and `set -e` does not catch that in a function
+# invoked under `||`, so the step reports success and skips its work.
+# scripts/command_words.py does the parsing; resolving is this shell's job,
+# because only it can see the functions defined above.
+undefined_calls() {
+  local words name
+  words=$(python3 "$REPO_ROOT/scripts/command_words.py" "$SELF_PATH" 2>/dev/null) || return 0
+  for name in $words; do
+    command -v "$name" >/dev/null 2>&1 || printf '%s\n' "$name"
+  done
+}
+
 self_test() {
   step "Self-test"
+
+  say "  every call resolves"
+  local unresolved
+  unresolved=$(undefined_calls | tr '\n' ' ')
+  check_eq "no call without a definition" "" "${unresolved% }"
 
   say "  the solc PATH line"
   check "it names solc-select's artifact directories" \
