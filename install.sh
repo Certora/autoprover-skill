@@ -12,7 +12,7 @@
 #   4. the skill    - into the skill directory of each agent found on this box.
 #
 # Everything it creates is recorded in a state file and removable with
-# --uninstall. --self-test exercises the plan and the error paths offline.
+# --self-test exercises the plan and the error paths offline.
 #
 # Written for bash 3.2, the version macOS still ships: no associative arrays,
 # no `readarray`, no `${var^^}`. Lists are space-separated strings.
@@ -57,8 +57,8 @@ RECOMMENDED_JAVA_MAJOR=21
 # back.
 AUTOSETUP_DEFAULT_SOLC="0.8.34"
 
-# Where the installer keeps its own files: the state file --uninstall reads, and
-# what it installed, so --uninstall removes exactly that and nothing else.
+# Where the installer keeps its own files: a record of what it installed, for a
+# human to read afterwards. Nothing here removes anything.
 STATE_DIR="$HOME/.certora/certora-verify"
 STATE_FILE="$STATE_DIR/install-state"
 
@@ -72,7 +72,6 @@ DO_COMPOSER=1
 DO_SOLC=1
 DO_SKILL=1
 SOLC_ONLY=0
-DO_UNINSTALL=0
 DO_SELF_TEST=0
 TARGETS=""                # empty means "autodetect"
 LINK_MODE="auto"          # auto | symlink | copy
@@ -197,7 +196,7 @@ Options:
   --autoprover-ref <r>  build ai-composer from this AutoProver ref instead of the
                         pinned $AUTOPROVER_REF
   --bin-dir <path>      link the certora-cli commands here instead of into the
-                        uv tool bin dir
+                        uv tool bin dir (this directory is reported for PATH too)
   --target <agent>      write the skill for one agent only, or "all" for every
                         known one. Repeatable. Known: $AGENT_KEYS
   --copy                copy the skill instead of symlinking it
@@ -206,13 +205,14 @@ Options:
   --append-path         append the PATH lines to your shell rc (off by default;
                         without them the lines are printed for you to add yourself)
   --no-java-check       do not fail preflight over a missing or old Java
-  --uninstall           remove everything a previous run of this script created
   --self-test           check the plan and the error paths; needs no network
   --dry-run             print the whole plan and change nothing
   -y, --yes             answer yes to every prompt
   -h, --help            this text
 
-What it writes, and nothing else:
+What it writes, and nothing else. It deletes nothing, ever: everything below is
+shared with other tools, so removing a piece is the job of the command that owns
+it (README.md lists them):
   compiler store:     \$HOME/.solc-select   (solc-select's own, shared with slither et al)
   the toolchain:      \$(uv tool dir) and \$(uv tool dir --bin), where uv keeps its tools
   uv's own trees:     \$HOME/.cache/uv, and the managed CPython under \$HOME/.local/share/uv
@@ -238,7 +238,6 @@ parse_args() {
       --skill-only)   DO_UV=0; DO_COMPOSER=0; DO_SOLC=0 ;;
       --deps-only)    DO_SKILL=0 ;;
       --solc-only)    DO_UV=0; DO_COMPOSER=0; DO_SKILL=0; SOLC_ONLY=1 ;;
-      --uninstall)    DO_UNINSTALL=1 ;;
       --self-test)    DO_SELF_TEST=1 ;;
       --solc)
         [ $# -ge 2 ] || die "--solc needs a version list, e.g. --solc \"0.8.30 0.8.37\""
@@ -268,7 +267,7 @@ parse_args() {
     shift
   done
 
-  if [ "$DO_UNINSTALL" -eq 1 ] || [ "$DO_SELF_TEST" -eq 1 ]; then
+  if [ "$DO_SELF_TEST" -eq 1 ]; then
     return 0
   fi
 
@@ -301,7 +300,7 @@ parse_args() {
 # ------------------------------------------------------------------ state ---
 
 # The state file is a flat KEY=VALUE list, one per line, readable by anything
-# that can read a text file: --uninstall reads it back, and the skill reads it to
+# that can read a text file: a person reads it back, and the skill reads it to
 # find out where the commands and the compilers ended up. Scalar keys are
 # overwritten on each run; list keys accumulate.
 STATE_SCALARS="VERSION INSTALLED_AT AUTOPROVER_REF UV_BIN_DIR CLI_BIN_DIR SOLC_STORE SKILL_SRC ANTHROPIC_MODE UV_INSTALLED"
@@ -705,12 +704,21 @@ on_path() {
 # The console scripts of every uv-installed tool land in one directory, and a
 # fresh uv install does not put it on PATH. Checked once, after the toolchain
 # steps, so it is reported even when every tool was already present.
+#
+# --bin-dir puts the certora-cli commands somewhere else, and that directory has
+# the same problem: certoraRun is linked into it and the skill looks for
+# certoraRun on PATH, so both directories are reported.
 check_bin_path() {
   command -v uv >/dev/null 2>&1 || return 0
-  local uv_bin
+  local uv_bin cli_bin
   uv_bin=$(uv tool dir --bin 2>/dev/null || printf '%s' "$UV_DEFAULT_BIN")
   state_set UV_BIN_DIR "$uv_bin"
   on_path "$uv_bin" || note_path_dir "$uv_bin"
+  cli_bin=$(cli_bin_dir)
+  state_set CLI_BIN_DIR "$cli_bin"
+  if [ "$cli_bin" != "$uv_bin" ]; then
+    on_path "$cli_bin" || note_path_dir "$cli_bin"
+  fi
 }
 
 # ------------------------------------------------------------------ solc ----
@@ -1192,168 +1200,6 @@ runtime_notes() {
   say "  It is not stored anywhere by this script; export it in your own shell."
 }
 
-# ------------------------------------------------------------- uninstall ----
-
-uninstall() {
-  [ -f "$STATE_FILE" ] ||
-    die "no install state at $STATE_FILE, so there is nothing this script knows it created. Remove anything left over by hand."
-
-  # The uv tools can only be removed through uv, and uv is often installed
-  # somewhere the current shell does not search, so make it reachable by name
-  # before the plan is built.
-  adopt_uv || true
-
-  local dest mode key src target bin tools t rc rcline
-  UNINSTALL_LEFT=0
-
-  step "Uninstall plan"
-  say "  Read from $STATE_FILE (installed $(state_value INSTALLED_AT))."
-  say ""
-  say "  Will remove:"
-
-  state_values SKILL_INSTALL | while IFS='|' read -r key mode dest src; do
-    say "    skill for $key: $dest ($mode)"
-  done
-  state_values CLI_LINK | while IFS= read -r dest; do
-    say "    certora-cli command: $dest"
-  done
-
-  tools=$(state_values UV_TOOL | sort -u | tr '\n' ' ')
-  [ -z "$tools" ] || say "    uv tools: $tools"
-  state_values PATH_RC | while IFS='|' read -r rc rcline; do
-    say "    the PATH line this script appended to $rc"
-  done
-  say "    the state file and $STATE_DIR"
-  say ""
-  say "  Will NOT remove:"
-  say "    the compilers themselves in $(state_value SOLC_STORE) -- solc-select's store is"
-  say "    shared with slither and anything else that uses it. Remove versions with"
-  say "    \`solc-select uninstall <version>\` if you want them gone."
-  say "    any skill directory, symlink or file this script did not create."
-  uv_installed_note
-
-  if ! confirm "  Proceed?"; then
-    say "  Nothing was removed."
-    return 0
-  fi
-
-  step "Removing"
-
-  # Skill installs. A symlink is removed only when it still points at the
-  # source this script linked, and a copy only when it still looks like the
-  # skill, so an install someone replaced by hand is left alone.
-  state_values SKILL_INSTALL | while IFS='|' read -r key mode dest src; do
-    [ -n "$dest" ] || continue
-    if [ "$mode" = "symlink" ]; then
-      if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
-        run rm -f "$dest"
-      else
-        warn "$dest is no longer the symlink this script created; leaving it."
-      fi
-    else
-      if [ -d "$dest" ] && [ -f "$dest/SKILL.md" ]; then
-        run rm -rf "$dest"
-      else
-        warn "$dest is not the skill copy this script created; leaving it."
-      fi
-    fi
-  done
-
-  # certora-cli commands: symlinks into the ai-composer tool venv.
-  state_values CLI_LINK | while IFS= read -r dest; do
-    [ -L "$dest" ] || continue
-    target=$(readlink "$dest")
-    case "$target" in
-      */"$AI_COMPOSER_TOOL"/bin/*) run rm -f "$dest" ;;
-      *) warn "$dest points at $target, not at the tool venv; leaving it." ;;
-    esac
-  done
-
-  # uv tools. `uv tool uninstall` removes the venv and the entry points it
-  # linked, which is everything uv created for them.
-  if [ -n "$tools" ]; then
-    if command -v uv >/dev/null 2>&1; then
-      for t in $tools; do
-        run uv tool uninstall "$t" ||
-          { UNINSTALL_LEFT=$((UNINSTALL_LEFT + 1)); warn "uv tool uninstall $t failed; remove it with \`uv tool uninstall $t\`."; }
-      done
-    else
-      UNINSTALL_LEFT=$((UNINSTALL_LEFT + 1))
-      # shellcheck disable=SC2086  # $tools is a space-separated list, split on purpose
-      warn "uv is not reachable, so these tools are still installed: $tools. Put uv on PATH and run this again."
-    fi
-  fi
-
-  state_values PATH_RC | while IFS='|' read -r rc rcline; do
-    remove_path_line "$rc" "$rcline"
-  done
-
-  # A --bin-dir of its own is removed when this script emptied it; the uv tool
-  # bin dir is never a candidate, because uv and everything else lives there.
-  bin=$(state_value CLI_BIN_DIR)
-  if [ -n "$bin" ] && [ -d "$bin" ] && [ "$bin" != "$(state_value UV_BIN_DIR)" ]; then
-    if dir_is_empty "$bin"; then
-      run rmdir "$bin" || true
-    else
-      info "$bin still holds files this script did not create; leaving it."
-    fi
-  fi
-
-  if [ "$UNINSTALL_LEFT" -eq 0 ]; then
-    run rm -rf "$STATE_DIR"
-  else
-    info "keeping $STATE_FILE: $UNINSTALL_LEFT item(s) are still installed, and it is the only record of them."
-  fi
-
-  step "Done"
-  if [ "$UNINSTALL_LEFT" -eq 0 ]; then
-    say "  Everything this script recorded is gone."
-  else
-    say "  Removed what it could. $UNINSTALL_LEFT item(s) are listed above as still installed."
-  fi
-  if [ "$DRY_RUN" -eq 1 ]; then
-    say "  This was a dry run. Nothing on this machine was changed."
-  fi
-}
-
-dir_is_empty() {
-  [ -d "$1" ] || return 0
-  [ -z "$(ls -A "$1" 2>/dev/null)" ]
-}
-
-uv_installed_note() {
-  local who
-  who=$(state_value UV_INSTALLED)
-  [ -n "$who" ] || return 0
-  say "    uv itself ($who). Other things on this machine may use it now, so it stays."
-  say "    Remove it yourself with:  uv cache clean && rm -rf \"\$HOME/.local/share/uv\" \"$who\""
-}
-
-# Removes exactly the two lines this script appended: its marker comment and
-# the export line right after it. Anything else in the file is copied through
-# untouched.
-remove_path_line() {
-  local rc="$1" line="$2" tmp
-  [ -f "$rc" ] || return 0
-  if ! grep -Fq "$PATH_MARKER" "$rc"; then
-    info "$rc no longer holds the line this script added; leaving it."
-    return 0
-  fi
-  if [ "$DRY_RUN" -eq 1 ]; then
-    info "would remove the marker line and \"$line\" from $rc"
-    return 0
-  fi
-  tmp="$rc.certora-verify.tmp"
-  awk -v marker="$PATH_MARKER" -v want="$line" '
-    skip == 1 { skip = 0; if ($0 == want) next }
-    $0 == marker { skip = 1; next }
-    { print }
-  ' "$rc" > "$tmp" || { warn "could not rewrite $rc; remove the line yourself."; return 0; }
-  printf '  + rewrite %s without the PATH line it added\n' "$rc"
-  # Written back through the existing file rather than moved over it, so the
-  # startup file keeps its inode and its permissions.
-  cat "$tmp" > "$rc" && rm -f "$tmp"
-}
 
 # ------------------------------------------------------------- self-test ----
 
@@ -1473,8 +1319,6 @@ self_test() {
   check_fails "--bin-dir with a space is rejected"  "$SELF_PATH" --bin-dir "/tmp/a b" --dry-run
   local home plan
   home=$(mktemp -d)
-  check_fails "--uninstall with no state file is rejected" \
-    env HOME="$home" "$SELF_PATH" --uninstall --yes
   rm -rf "$home"
 
   say "  the dry run writes nothing"
@@ -1510,15 +1354,6 @@ self_test() {
   esac
   rm -rf "$home"
 
-  say "  the uninstall plan reads a state file"
-  home=$(mktemp -d)
-  mkdir -p "$home/.certora/certora-verify"
-  printf 'INSTALLED_AT=2026-01-01T00:00:00Z\nBRIDGE_DIR=%s/bin\nSOLC_STORE=%s/.solc-select\n' "$home" "$home" \
-    > "$home/.certora/certora-verify/install-state"
-  check "--uninstall --dry-run reads it" env HOME="$home" "$SELF_PATH" --uninstall --dry-run --yes
-  check_eq "the state file survives a dry-run uninstall" "1" \
-    "$([ -f "$home/.certora/certora-verify/install-state" ] && echo 1 || echo 0)"
-  rm -rf "$home"
 
   step "Self-test summary"
   if [ "$TESTS_FAILED" -eq 0 ]; then
@@ -1555,7 +1390,7 @@ summary() {
   else
     say ""
     say "  What was installed is recorded in $STATE_FILE."
-    say "  ./$SELF_NAME --uninstall removes all of it."
+    say "  Nothing here removes anything: what you no longer want, you remove yourself."
   fi
 
   [ -z "$FAIL_LINES" ]
@@ -1569,13 +1404,6 @@ main() {
   if [ "$DO_SELF_TEST" -eq 1 ]; then
     say "certora-verify installer $INSTALLER_VERSION self-test"
     self_test
-    return $?
-  fi
-
-  if [ "$DO_UNINSTALL" -eq 1 ]; then
-    say "certora-verify installer $INSTALLER_VERSION"
-    if [ "$DRY_RUN" -eq 1 ]; then say "  mode:  dry run, nothing will be changed"; fi
-    uninstall
     return $?
   fi
 

@@ -117,15 +117,22 @@ git ls-remote https://github.com/Certora/AutoProver master
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-verify`. |
 | toolchain, after a pin bump | `./install.sh --deps-only --reinstall`. |
 
-### Uninstall
+### Removing it again
+
+There is no uninstall subcommand, deliberately: everything it would delete is shared with
+other tools on the machine, and getting that wrong costs a user their files. Each piece comes
+off with the command that owns it, and `$HOME/.certora/certora-verify/install-state` lists
+what this machine got.
 
 ```sh
-./install.sh --uninstall --dry-run   # list what would be removed
-./install.sh --uninstall
+uv tool uninstall ai-composer solc-select   # the toolchain
+solc-select uninstall 0.8.34                # one compiler, from the store slither shares
+rm ~/.agents/skills/certora-verify          # the skill, per agent directory it was written to
 ```
 
-It reverses what the installer created. Run the dry run first and read the list: the compiler
-store, the uv tool tree and uv itself are shared with other tools on the machine.
+The certora-cli commands are console scripts of the `ai-composer` tool, so `uv tool uninstall`
+takes them with it. If you used `--append-path`, the lines it added carry the comment
+`# added by certora-verify install.sh`; delete them from your shell startup file.
 
 ### Manual install
 
@@ -388,10 +395,8 @@ a long wall clock time. Eval 3 is offline and cheap.
 The installer has been run end to end on macOS (Apple silicon, zsh), from an empty HOME with
 nothing but `/usr/bin:/bin` on PATH: uv, `ai-composer` at the pinned commit, `certora-cli`
 8.19.2 with `certoraRun` reachable on PATH, solc-select with its compilers on PATH, and the skill
-symlinked. A second run is a no-op. `--uninstall` removes the uv tools, the command symlinks,
-the compiler symlinks, the shim and the state file, and leaves the solc-select compiler store
-alone because other tools share it. No shell startup file is written. `--self-test` runs 35
-checks and `shellcheck` is clean apart from two intentional subshell notices.
+symlinked. A second run is a no-op. No shell startup file is written. `--self-test` runs 30
+checks and `shellcheck` is clean.
 
 What has not been tested: no agent has loaded this skill yet, in any harness, and no
 verification run has been driven through this installer from Phase 0 to a report. The
