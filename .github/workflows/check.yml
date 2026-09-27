@@ -240,6 +240,10 @@ jobs:
       # The replacement for a --dry-run flag: with stdin closed the first
       # confirmation prompt refuses, so the script prints its whole plan and
       # exits without having touched anything. This exercises the real path.
+      # The plan only reaches the toolchain step once uv is present; without it
+      # the script stops at the uv prompt, which is a different assertion.
+      - uses: astral-sh/setup-uv@v5
+
       - name: install.sh writes nothing before you agree
         run: |
           set -eu
