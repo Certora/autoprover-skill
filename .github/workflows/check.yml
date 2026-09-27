@@ -25,11 +25,10 @@ jobs:
       - name: Install the linters
         run: |
           set -eu
-          python3 -m pip install --quiet --disable-pip-version-check pyyaml 'ruff==0.16.7'
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml
           command -v shellcheck >/dev/null 2>&1 ||
             python3 -m pip install --quiet --disable-pip-version-check shellcheck-py
           shellcheck --version | sed -n 2p
-          ruff --version
 
       # A clone is all a user gets. Everything the README tells them to run has
       # to be in it, and install.sh has to be executable in the index.
@@ -38,14 +37,14 @@ jobs:
           set -eu
           missing=0
           for f in install.sh \
-                   scripts/solc_versions.py \
                    README.md \
                    AGENTS.md \
                    LICENSE \
                    .claude-plugin/plugin.json \
                    .claude-plugin/marketplace.json \
                    .agents/plugins/marketplace.json \
-                   skills/certora-verify/SKILL.md; do
+                   skills/certora-verify/SKILL.md \
+                   skills/certora-verify/AUTOPROVER_REF; do
             if [ -z "$(git ls-files -- "$f")" ]; then
               echo "::error file=$f::$f is not tracked, so a clone will not have it"
               missing=1
@@ -74,21 +73,6 @@ jobs:
           done
           if [ "$found" -ne 1 ]; then
             echo "::error::no shell script is tracked, and install.sh is the product"
-            exit 1
-          fi
-
-      - name: Python scripts compile and lint clean
-        run: |
-          set -eu
-          found=0
-          for f in $(git ls-files '*.py'); do
-            found=1
-            echo "== $f"
-            python3 -m py_compile "$f"
-            ruff check --isolated --select E4,E7,E9,F "$f"
-          done
-          if [ "$found" -ne 1 ]; then
-            echo "::error::no python script is tracked, and install.sh runs scripts/solc_versions.py"
             exit 1
           fi
 
@@ -219,33 +203,58 @@ jobs:
       # the argument-error paths, which exit before the first network call.
       # unshare -rn leaves it no route out, and the throwaway HOME is diffed
       # afterwards, so a side effect or a stray download fails the step.
-      - name: install.sh self-test, offline and without side effects
+
+      # One pin, and the only copy of it. The installer reads this file and so
+      # does the agent following Phase 0, so a SHA written into prose is a
+      # second copy that will drift.
+      - name: The AutoProver pin is a file, and nothing duplicates it
         run: |
           set -eu
-          root="$PWD"
-          fake_home="$(mktemp -d)"
-          before="$(mktemp)"
-          after="$(mktemp)"
-          find "$fake_home" | sort > "$before"
-
-          offline() {
-            if unshare -rn true 2>/dev/null; then
-              unshare -rn env HOME="$fake_home" "$@"
-            else
-              echo "note: no network namespace here, running with the network up"
-              env HOME="$fake_home" "$@"
-            fi
-          }
-
-          echo "== --self-test"
-          offline "$root/install.sh" --self-test
-
-          echo "== the plan, with no toolchain and no agent config"
-          offline "$root/install.sh" --dry-run --yes --target agents --skill-only
-
-          find "$fake_home" | sort > "$after"
-          if ! diff "$before" "$after"; then
-            echo "::error file=install.sh::install.sh wrote into HOME"
+          ref=$(tr -d '[:space:]' < skills/certora-verify/AUTOPROVER_REF)
+          case "$ref" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) echo "::error file=skills/certora-verify/AUTOPROVER_REF::not a 40-character SHA: $ref"; exit 1 ;;
+          esac
+          echo "ok  pin is $ref"
+          if git ls-files '*.md' | xargs grep -nE '\b[0-9a-f]{40}\b' ; then
+            echo "::error::a 40-character SHA appears in Markdown; the pin belongs only in AUTOPROVER_REF"
             exit 1
           fi
-          echo "HOME is untouched"
+          echo "ok  no Markdown file carries a SHA"
+
+      - name: install.sh rejects bad arguments
+        run: |
+          set -eu
+          want_ok()   { echo "== ok   $*"; ./install.sh "$@" >/dev/null; }
+          want_fail() { echo "== fail $*"
+                        if ./install.sh "$@" >/dev/null 2>&1; then
+                          echo "::error::expected a non-zero exit: $*"; exit 1
+                        fi; }
+          want_ok   --help
+          want_fail --nope
+          want_fail stray
+          want_fail --autoprover-ref
+          want_fail --dir
+          want_fail --skill-only --deps-only
+
+      # The replacement for a --dry-run flag: with stdin closed the first
+      # confirmation prompt refuses, so the script prints its whole plan and
+      # exits without having touched anything. This exercises the real path.
+      - name: install.sh writes nothing before you agree
+        run: |
+          set -eu
+          ref=$(tr -d '[:space:]' < skills/certora-verify/AUTOPROVER_REF)
+          fake=$(mktemp -d); before=$(mktemp); after=$(mktemp)
+          find "$fake" | sort > "$before"
+          if plan=$(env HOME="$fake" ./install.sh </dev/null 2>&1); then
+            echo "::error file=install.sh::expected a non-zero exit with stdin closed"; exit 1
+          fi
+          find "$fake" | sort > "$after"
+          if ! diff "$before" "$after"; then
+            echo "::error file=install.sh::wrote into HOME before any confirmation"; exit 1
+          fi
+          case "$plan" in *"uv tool install"*) ;;
+            *) echo "::error::the plan does not name the install command"; exit 1 ;; esac
+          case "$plan" in *"$ref"*) ;;
+            *) echo "::error::the plan does not name the pinned ref"; exit 1 ;; esac
+          echo "ok  plan printed, HOME untouched"

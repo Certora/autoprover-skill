@@ -40,7 +40,7 @@ and watched it pick the skill up.
 
 OpenAI's own Codex documentation lists `.agents/skills` (walking up from the working
 directory), `~/.agents/skills` and `/etc/codex/skills`, and does not mention `~/.codex/skills`.
-Installing to both covers it, which is what `./install.sh --target codex --target agents`
+Installing to both covers it, which is what `./install.sh --dir ~/.codex/skills --dir ~/.agents/skills`
 does.
 
 Two things the skill needs from the host agent regardless of which one it is: a shell that can
@@ -60,27 +60,22 @@ cd autoprover-skill
 skill directory it finds on the machine. It does not set `CERTORAKEY`; that one is yours to
 export. See [Requirements](#requirements) for what each piece is for.
 
-**It downloads no Solidity compilers by default.** It installs
-[solc-select](https://github.com/crytic/solc-select) and tells you how to put its compilers on
-PATH; the compilers themselves arrive only when you ask for them:
+**It installs no Solidity compiler.** It installs
+[solc-select](https://github.com/crytic/solc-select), which manages them, and stops there:
+which compilers a project needs is a property of that project, so the skill reads the
+project's build configuration and installs what it resolves to, in Phase 3.
+
+Run it with stdin closed to see the whole plan without changing anything:
 
 ```sh
-./install.sh --solc "0.8.34 0.8.30 0.7.6"   # named versions
-./install.sh --project ~/code/my-protocol   # whatever that project's pragmas need
+./install.sh </dev/null
 ```
 
-Both flags work on their own later too, through `./install.sh --solc-only`, and
-`solc-select install <version>` works directly, as for any other tool that uses it. With no
-compiler installed, the installer says so and names those two flags rather than reporting a
-green install.
-
-Other options worth knowing: `--dry-run` prints the whole plan and changes nothing,
-`--skill-only` and `--deps-only` split the two halves, `--target <agent>` writes one agent's
-skill directory instead of all of them, `--copy` copies the skill instead of symlinking it,
-`--append-path` appends the PATH lines to your shell rc instead of printing them for you,
-`--reinstall` re-resolves the toolchain, `--bin-dir <path>` links the certora-cli commands
-somewhere other than the uv bin directory, and `--self-test` runs the plan and error-path
-checks without touching the network. `./install.sh --help` lists them all.
+The options: `--skill-only` and `--deps-only` split the two halves, `--dir <path>` writes the
+skill somewhere specific instead of the detected directories, `--copy` copies it instead of
+symlinking, `--reinstall` re-resolves the toolchain and lets uv take over command names
+another tool owns, `--autoprover-ref <ref>` builds from a different AutoProver commit, and
+`--yes` answers every prompt. `./install.sh --help` lists them all.
 
 ### The AutoProver pin
 
@@ -121,8 +116,8 @@ git ls-remote https://github.com/Certora/AutoProver master
 
 There is no uninstall subcommand, deliberately: everything it would delete is shared with
 other tools on the machine, and getting that wrong costs a user their files. Each piece comes
-off with the command that owns it, and `$HOME/.certora/certora-verify/install-state` lists
-what this machine got.
+off with the command that owns it, and `uv tool list` shows what uv is holding, which is
+everything the installer put on your PATH.
 
 ```sh
 uv tool uninstall ai-composer solc-select   # the toolchain
@@ -130,9 +125,8 @@ solc-select uninstall 0.8.34                # one compiler, from the store slith
 rm ~/.agents/skills/certora-verify          # the skill, per agent directory it was written to
 ```
 
-The certora-cli commands are console scripts of the `ai-composer` tool, so `uv tool uninstall`
-takes them with it. If you used `--append-path`, the lines it added carry the comment
-`# added by certora-verify install.sh`; delete them from your shell startup file.
+The certora-cli commands come from the same uv tool, so `uv tool uninstall` takes them with
+it. The installer writes to no shell startup file, so there is nothing to undo there.
 
 ### Manual install
 
@@ -239,8 +233,8 @@ it installs from the git URL at the pinned commit:
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
 GIT_CONFIG_VALUE_0='git@github.com:' \
-uv tool install --python 3.12 \
-  'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@e6f9e2e4706225adb07178c1866ad61b4d827424'
+uv tool install --python 3.12 --with-executables-from certora-cli \
+  "ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@$(cat skills/certora-verify/AUTOPROVER_REF)"
 ```
 
 The `GIT_CONFIG_*` variables are load bearing. AutoProver's `graphcore` submodule is recorded
@@ -251,24 +245,14 @@ that extra, so without it the environment has no prover CLI at all. Do not add t
 extra; nothing on the autosetup path imports it, and it pulls in torch and the CUDA wheels.
 Expect a large install: 164 packages, about 736 MB, several minutes on a cold cache.
 
-**`certoraRun`.** The command above does not put it on PATH. `uv tool install` links the
-console scripts of the package you named, so `ai-composer`'s scripts are linked and
-`certora-cli`'s stay inside the tool environment, unreachable. The extra did install
-`certora-cli` there, so the fix is to link those scripts out rather than install a second copy:
+**`certoraRun`.** `--with-executables-from certora-cli` is what puts it on PATH. Without that
+flag `uv tool install` links the console scripts of the package you named and leaves
+`certora-cli`'s inside the tool environment, unreachable; with it, uv links all nine of them
+and records them in the same receipt, so `uv tool uninstall ai-composer` takes them back too.
+No second copy of certora-cli exists to drift.
 
-```sh
-tooldir=$(uv tool dir)/ai-composer
-bindir=$(uv tool dir --bin)
-for c in certoraRun certoraEVMProver certoraMutate certoraEqCheck certoraRanger \
-         certoraCVLFormatter certoraSolanaProver certoraSorobanProver certoraSuiProver; do
-  [ -x "$tooldir/bin/$c" ] && ln -sfn "$tooldir/bin/$c" "$bindir/$c"
-done
-```
-
-`install.sh` does this, reading the script names out of the installed distribution rather than
-from a list, so the `certoraRun` on your PATH is always the one `ai-composer` resolved. A plain
-`uv tool install certora-cli` also works and is what to use if you want certora-cli on its own,
-at the cost of a second copy that can drift to a different version.
+If uv answers `Executables already exist`, a standalone `certora-cli` tool already owns those
+names: remove it with `uv tool uninstall certora-cli`, or add `--force` to let uv take them.
 
 **PATH.** One directory has to be on it:
 
@@ -277,9 +261,8 @@ export PATH="$(uv tool dir --bin):$PATH"
 ```
 
 That is normally `~/.local/bin`, and it holds `certora-autosetup`, `certoraRun` and
-`solc-select`. The compilers are on PATH separately, through solc-select's own artifact
-directories; see **solc** below. The installer prints both lines, and `--append-path` appends
-them to your shell rc for you.
+`solc-select`, plus the `solc` that solc-select dispatches to the version you selected. The
+installer prints the line; adding it to a startup file is yours to do.
 
 **Java.** `certora-cli` ships jars and shells out to them. `certoraRun` on its own only warns
 when Java is absent and skips local CVL typechecking, but `certora-autosetup` runs
@@ -314,36 +297,38 @@ ones that are hard to summarize statically get none, and specs that lean on them
 With a real key you can drop `--skip-llm` and get the LLM-written summaries, at the price of
 LLM calls billed to that key.
 
-**solc.** Nothing in the install ships a Solidity compiler, and the installer downloads none
-unless you ask. Compilers are managed by [solc-select](https://github.com/crytic/solc-select),
-the same way the rest of the Solidity tooling does it:
+**solc.** Nothing in the install ships a Solidity compiler, and the installer installs none.
+Compilers are managed by [solc-select](https://github.com/crytic/solc-select), the same way the
+rest of the Solidity tooling does it:
 
 ```sh
-uv tool install solc-select                             # or pipx, or pip
-env -u VIRTUAL_ENV solc-select install 0.8.34 0.8.30    # the versions your project needs
+uv tool install solc-select                          # or pipx, or pip
+env -u VIRTUAL_ENV solc-select install 0.8.27        # the version the project resolves to
+env -u VIRTUAL_ENV solc-select use 0.8.27
 ```
 
-One project routinely needs several compilers at the same time, because autosetup emits a
-`compiler_map` pinning different contracts to different ones. `solc-select use` switches a
-single global version, which cannot express that, so the versions have to be reachable by name
-side by side. solc-select already stores them that way: each release sits in its own directory
-as a binary named after it, `~/.solc-select/artifacts/solc-0.8.34/solc-0.8.34`. Putting those
-directories on PATH is the whole of it, and nothing is renamed or symlinked:
+Which version is not a question about your machine, so the skill answers it per project in
+Phase 3, from the project's resolved build plan rather than from its pragmas:
+`forge compiler resolve --json -vv` for Foundry, autosetup's own
+`hardhat_config_extractor.js` for Hardhat. Pragmas say what each file tolerates; the build plan
+says what the project actually compiles with. On one real project the resolved plan is a single
+0.8.27 while a repository-wide pragma reading adds a second version that must never reach a
+`compiler_map`.
 
-```sh
-for d in "$HOME"/.solc-select/artifacts/*/; do PATH="$PATH:${d%/}"; done
-export PATH
-```
+With one compiler selected, the skill passes `--solc-default solc` to autosetup, which pins
+every contract to that bare name and collapses the map back to a scalar, so the conf follows
+whatever solc-select has selected. Leaving the flag off is the trap: autosetup pins its own
+default `solc8.34` into the compiler map while the switch that would let it substitute a
+compiler you do have was already computed as off, so a missing compiler becomes a compile
+failure with no explanation.
 
-autosetup detects that naming and writes `solc-0.8.34` into the conf and the compiler map
-(`certora_autosetup/fixconf_prechecks.py:168-210`, which prefers solc-select's names when they
-are on PATH and the older `solc8.34` form is not). `install.sh` prints that loop, and
-`--append-path` adds it to your shell rc. The glob covers versions you install later, so it is
-written once.
-
-autosetup falls back to a bare `solc` when a pinned compiler is missing. That name is
-solc-select's own shim, which raises until a version is chosen, so run `solc-select use
-<version>` once if you want the fallback to work. Nothing here sets it for you.
+A project that genuinely needs several compilers at once is the exception, and the limit is
+autosetup's rather than certoraRun's: autosetup's only name for a per-contract compiler is the
+Certora form `solc8.27` (`enhanced_config_manager.py:745-761`, with the convention hardcoded at
+`setup_prover.py:259-267`), and solc-select's store holds no such name. certoraRun itself is
+not fussy: `solc` and every `compiler_map` value may be a bare name on PATH, an absolute path
+or a cwd-relative path (`certoraValidateFuncs.py:409-420`, `:125-160`), and the version comes
+from running the binary (`CompilerCollectorFactory.py:142-169`), never from parsing its name.
 
 Three details worth knowing. `env -u VIRTUAL_ENV` matters because solc-select relocates its
 whole store into `$VIRTUAL_ENV/.solc-select` when that variable is set, and then the artifact
@@ -358,12 +343,10 @@ missing.
 ## Layout
 
 ```
-install.sh                    installs the toolchain and links the skill; holds the AutoProver pin
+install.sh                    installs the toolchain and links the skill
 README.md                     this file
 AGENTS.md                     entry point for agents with no skill mechanism
 LICENSE                       GNU General Public License v3
-scripts/
-  solc_versions.py            derives a project's solc versions with autosetup's own pragma parser
 .claude-plugin/
   plugin.json                 Claude Code plugin manifest
   marketplace.json            Claude Code marketplace holding that one plugin
@@ -392,14 +375,40 @@ a long wall clock time. Eval 3 is offline and cheap.
 
 ## What has actually been tested
 
-The installer has been run end to end on macOS (Apple silicon, zsh), from an empty HOME with
-nothing but `/usr/bin:/bin` on PATH: uv, `ai-composer` at the pinned commit, `certora-cli`
-8.19.2 with `certoraRun` reachable on PATH, solc-select with its compilers on PATH, and the skill
-symlinked. A second run is a no-op. No shell startup file is written. `--self-test` runs 30
-checks and `shellcheck` is clean.
+Measured on macOS (Apple silicon, zsh). The installer runs end to end from an empty HOME with
+nothing but `/usr/bin:/bin` on PATH, into scratch uv directories: `ai-composer` at the pinned
+commit, `certora-cli` 8.19.2 with `certoraRun` reachable from the bin dir it reports,
+`solc-select`, and the skill symlinked. A second run is a no-op. With stdin closed it prints
+the plan, exits non-zero and leaves HOME byte-identical. No shell startup file is written.
+`shellcheck` is clean.
+
+Also measured, because the design rests on it: `uv tool install --with-executables-from
+certora-cli` does expose certora-cli's nine commands even though certora-cli arrives through an
+extra, uv records all nine in its receipt, and `uv tool uninstall ai-composer` takes all thirty
+back. A standalone `certora-cli` tool collides, and uv says so plainly rather than silently
+taking the name.
+
+On compilers, measured by running autosetup against a Foundry project that pins
+`solc_version = "0.8.21"`, on a PATH holding only a solc-select-selected `solc` and no
+Certora-form binary. `forge compiler resolve --json` returned `{0.8.21}`, the pin. autosetup
+then wrote `solc8.21` into the conf from the build configuration, found no such binary, applied
+its `solc_not_found_fallback`, and the conf it drove came out as `"solc": "solc"`. It compiled
+and submitted four cloud jobs.
+
+Two things that run showed, which the recipe alone does not. `--solc-default solc` does not
+decide the conf's `solc` when the project declares a version: the build configuration wins
+(`build_systems/base.py:113-117`), and what rescues the run is the fallback, which is only
+armed because the conf is pinned. And the fallback rewrites the conf autosetup drives, while
+the sibling confs it also writes (`invariants.conf` and the per-property confs) keep the
+declared `solc8.21`, so those still want that binary by name.
+
+Read from AutoProver's source rather than measured: that certoraRun accepts absolute compiler
+paths, and that a project declaring no version at all loses the fallback entirely.
 
 What has not been tested: no agent has loaded this skill yet, in any harness, and no
-verification run has been driven through this installer from Phase 0 to a report. The
+verification run has been driven through this installer from Phase 0 to a report. The Hardhat
+extractor path has not been exercised from this skill against a real Hardhat project, and
+neither has a genuinely multi-compiler project. The
 per-agent skill directories come from vendor documentation and the skills CLI's own table
 rather than from a run in each agent, so treat the table in
 [Which agents it runs in](#which-agents-it-runs-in) as the claim it is.

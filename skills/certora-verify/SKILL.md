@@ -5,8 +5,9 @@ license: GPL-3.0-only
 compatibility: >-
   Requires certoraRun (certora-cli) and certora-autosetup on PATH, a CERTORAKEY for the
   Certora cloud prover, Java 19+, network access to prover.certora.com and
-  docs.certora.com, and the solc compilers the target project's pragmas require, managed by
-  solc-select with its artifact directories on PATH. No Anthropic key is needed: autosetup
+  docs.certora.com, and a Solidity compiler for the target project, installed and selected
+  with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
+  needed: autosetup
   runs with --skip-llm, and the variable it checks at import takes a placeholder.
 metadata:
   version: "0.1.0"
@@ -47,6 +48,7 @@ Every phase writes its result under the project's `certora/` directory, so an in
 |---|---|
 | `certora/analysis/application.json` | Phase 2 (component model) |
 | `certora/analysis/closure.json` | Phase 3 (scene decision) |
+| `certora/analysis/compilers.json` | Phase 3 (compiler selection) |
 | `certora/confs/<Main>.conf`, `certora/specs/summaries/…`, `certora/specs/sanity-<Main>.spec` | Phase 3 (autosetup) |
 | `certora/properties/<slug>.properties.json` | Phase 4 |
 | `certora/specs/invariants.spec` + `certora/confs/invariants.conf` | Phase 5 |
@@ -68,26 +70,21 @@ Read progress with `tail -n 20 certora/logs/<name>.log`, and check liveness with
 
 This skill is standalone: it needs nothing beyond the tools below. Fail fast with a specific message rather than improvising around a broken environment:
 
-- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both, though only one of them lands on PATH: the `certora-cli` extra installs `certoraRun` into the same tool environment, and `uv tool install` links the console scripts of the package you named, not those of its dependencies.
+- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
+
+  The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF`, the file beside this one; read it and substitute it for `<ref>`:
 
   ```bash
   GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
   GIT_CONFIG_VALUE_0='git@github.com:' \
-  uv tool install --python 3.12 \
-    'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@e6f9e2e4706225adb07178c1866ad61b4d827424'
+  uv tool install --python 3.12 --with-executables-from certora-cli \
+    'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@<ref>'
   ```
 
-  The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key. The ref is pinned because this skill describes autosetup flags and behaviour that move with it; this repo's `install.sh` carries the same pin and takes `--autoprover-ref` to override it.
+  The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key.
 
-  Then re-run `which certoraRun certora-autosetup`. If `certoraRun` is missing, link it out of the environment the extra installed it into:
-
-  ```bash
-  tooldir=$(uv tool dir)/ai-composer
-  for c in "$tooldir"/bin/certora*; do ln -sfn "$c" "$(uv tool dir --bin)/$(basename "$c")"; done
-  ```
-
-  If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
+  Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
 - `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make (`setup_prover.py:1526` sets `enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it).
 
   autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key (`certora_autosetup/setup/setup_summaries.py:70-93`); a `.env` in the working directory is loaded instead and then nothing is checked at all. So export a placeholder for the import and move on:
@@ -98,38 +95,10 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
   What the default costs: summaries for library and external functions are static only, so the ones that are hard to summarize statically get none, and specs that lean on them are weaker. If the user has a real Anthropic key and wants those summaries, drop `--skip-llm` and say that the run will make LLM calls they pay for. Ask first; never spend their key by default.
 - Java 19+ on PATH (`java -version`). autosetup shells out to the `ASTExtraction.jar` typechecker while resolving summaries and there is no fallback path, so an old or absent JDK fails mid-run rather than at startup.
-- The solc compilers the project needs are on PATH, managed by [solc-select](https://github.com/crytic/solc-select). A project routinely needs several at once, because autosetup emits a `compiler_map` pinning contracts to different compilers, so `solc-select use` alone is not enough: the versions have to be reachable by name at the same time.
+- A compiler manager, and a way to read a project's build plan. `solc-select` on PATH (`uv tool install solc-select` when it is not), plus `forge` when the target project has a `foundry.toml`, or `node` when it has a `hardhat.config.*`. No version is named here: which compilers a project needs is a property of that project, so Phase 3 derives it from the project's own build configuration and installs what it resolves to.
 
-  solc-select keeps every release in its own directory as a binary named after it, `~/.solc-select/artifacts/solc-0.8.29/solc-0.8.29`. Those directories on PATH give you `solc-0.8.29` and friends, which is the naming autosetup switches to when it sees it (`certora_autosetup/fixconf_prechecks.py:168-210` picks solc-select naming over the Certora `solc8.29` form when the solc-select names are on PATH and the Certora ones are not).
+  Two machine facts that belong here rather than in Phase 3. solc-select moves its whole store into an active virtualenv, so every `solc-select` command in this flow runs under `env -u VIRTUAL_ENV`. And no directory holding a compiler may contain a space: certoraRun builds the compiler command as one string and splits it on whitespace.
 
-  Start from what this project asks for: its `pragma solidity` statements plus any `solc` / `solc_version` / `solc-version` key in `foundry.toml` or the hardhat config, each resolved to the concrete release it admits. A version that isn't there yet is something to provision, not a reason to stop:
-
-  ```bash
-  uv tool install solc-select          # only if solc-select is not on PATH yet
-
-  # solc-select redirects its whole store into an active virtualenv, where nothing else
-  # looks, so run it with VIRTUAL_ENV out of the way.
-  env -u VIRTUAL_ENV solc-select install 0.8.29 0.7.6
-
-  # Each release lives in its own directory as a binary of the same name, so this puts
-  # every installed version on PATH at once, which is what a compiler_map needs.
-  for d in "$HOME"/.solc-select/artifacts/*/; do PATH="$PATH:${d%/}"; done
-  export PATH
-  ```
-
-  This skill's `install.sh` does exactly that, and downloads no compiler by default: versions arrive through `./install.sh --solc "0.8.29 0.7.6"` or `./install.sh --project <path>`. Either way, check the versions you derived above by name, which is this bullet's pass/fail gate:
-
-  ```bash
-  missing=""
-  for n in solc-0.8.29 solc-0.7.6; do command -v "$n" >/dev/null 2>&1 || missing="$missing $n"; done
-  [ -z "$missing" ] && echo "all compilers present" || echo "missing:$missing"
-  ```
-
-  A non-empty `missing` after an install attempt is the fail-fast case: name the absent compilers and stop, rather than starting a run that dies in compilation.
-
-  autosetup falls back to a bare `solc` when a pinned compiler is missing, and that name belongs to solc-select's shim, which raises until a version is selected. If you need the fallback, ask the user before running `solc-select use <version>`: it changes a global setting that their other tools share.
-
-  Never assume a fixed version, and never point the conf's `solc` or `compiler_map` at an absolute path: autosetup reads the compiler's version out of the *name*, so an absolute path leaves it unable to check pragmas, plan a fallback, or generate library harnesses. On Apple silicon 0.8.5 and up are native or universal binaries; below 0.8.5 they are Intel-only and need Rosetta 2, which is the user's call and not yours: stop and ask them to run `softwareupdate --install-rosetta`, which prompts for a license and for admin rights.
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
 
 ## Phase 1 — Design document (optional but valuable)
@@ -157,12 +126,58 @@ First decide the **scene** (which contracts the prover must model):
 - Classify each closure contract: a bog-standard ERC20 → note as ERC20 (the setup models tokens with dummy mocks); a meaningful ERC20 *extension* → keep as a real contract.
 - The prover instantiates exactly **one** instance per contract declaration. If meaningful verification requires ≥2 instances of one contract, write minimal harnesses `contract XInstance1 is X {}` under `certora/harnesses/` and add them to the scene. Usually not needed — skip unless the protocol's core state genuinely spans multiple instances.
 
-Record the closure in `certora/analysis/closure.json`. Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **detached** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
+Record the closure in `certora/analysis/closure.json`.
+
+### Compiler selection
+
+Which compilers this project needs is a property of the project, so derive it here rather than in preflight: a `git pull` in the target repo can change the answer.
+
+Read the **resolved build plan**, not the pragmas. Pragmas say what each file tolerates; the build plan says what the project actually compiles with, which is what autosetup has to agree with. For Foundry, from the project as the working directory (`--root` on its own returns `{}`):
+
+```bash
+cd <project_root>
+forge compiler resolve --json -vv 2>certora/logs/forge-resolve.err
+```
+
+`.Solidity[].version` is one entry per compilation unit, so deduplicate it; `.Solidity[].paths` is the file list each version covers. `No such file or directory` lines under `lib/` in the error log mean the project's dependencies are not checked out and the answer came from a partial source graph: run the project's own dependency step (`forge install`, or `git submodule update --init --recursive`) and read it again, because autosetup needs those sources too.
+
+For Hardhat, run autosetup's own extractor rather than parsing the config, which is code and can read the environment:
+
+```bash
+extractor=$("$(uv tool dir)"/ai-composer/bin/python -c \
+  'import certora_autosetup, pathlib; print(pathlib.Path(certora_autosetup.__file__).parent / "build_systems/hardhat_config_extractor.js")')
+cd <project_root> && node "$extractor"
+```
+
+Take `.solidity.compilers[].version` plus every `.solidity.overrides[*].version`, since an override is a per-file compiler. `.solidityImplicitDefault: true` means the project declares nothing and the version shown is Hardhat's own built-in default, which says nothing about these sources: treat it as no answer. `{}` means the config would not load, so run the project's install step first.
+
+With neither available, read the `pragma solidity` line of each file **in the closure** and take the newest release all of them admit. Say in the log that this is a pragma reading rather than a resolved plan: it over-reports. On one real project the resolved plan is a single 0.8.27 while a repository-wide pragma reading adds a second version that must never reach a `compiler_map`.
+
+Then intersect with the closure. A version whose files are all tests, scripts or library code outside the closure is not your problem.
+
+**One version over the closure**, which is the common case:
+
+```bash
+env -u VIRTUAL_ENV solc-select install 0.8.27
+env -u VIRTUAL_ENV solc-select use 0.8.27   # ask first: this is global, shared with their other tools
+solc --version                              # must report the version you chose
+```
+
+and add `--solc-default solc` to the autosetup command below. That flag is load-bearing in both directions. With it, autosetup pins every contract to the bare name `solc` and collapses the uniform map back to a scalar, so the conf compiles with whatever solc-select has selected. Without it, autosetup pins its own default `solc8.34` into the compiler map while the flag that would let it substitute a compiler you *do* have was already computed as off, so a missing compiler becomes a compile failure with no explanation instead of a clear error.
+
+**Several versions over the closure**: say so to the user, with the file lists, before spending anything. Try single-compiler first with the newest version every closure pragma admits; different pragmas are not the same thing as an unsatisfiable set, and autosetup says clearly when one compiler is not enough (`UnsatisfiableSolcPinError` names the contract and its pragma; `ConflictingPragmaError` means one compilation unit spans files no single compiler satisfies). If it genuinely needs several at once, stop and hand it back: autosetup's only name for a per-contract compiler is the Certora form `solc8.27`, solc-select's store holds no such name, and giving those names a home changes the user's PATH, which is their call and not yours.
+
+One thing to watch after autosetup finishes. When the project declares its own version, the conf carries the Certora-form name (`solc8.21`) rather than the bare `solc`, whatever `--solc-default` said, and what rescues a run on a machine without that binary is the missing-compiler fallback. That fallback rewrites the conf autosetup drives, but the sibling confs it writes alongside (`invariants.conf`, the per-property confs) keep the declared name. If a later `certoraRun` on one of those reports `Solidity executable solc8.X not found in path`, that is why: set its `solc` to the name your compiler actually answers to.
+
+Record what you found in `certora/analysis/compilers.json` (`source`, `versions`, `closure_versions`, `selected`, `mode`) so a resumed run does not derive it twice.
+
+Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **detached** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
 
 ```bash
 cd <project_root>
 nohup certora-autosetup --main-contract <rel_path>:<Main> \
   <rel_path>:<Main> <closure .sol files...> --no-strip-contracts --skip-llm \
+  --solc-default solc \
   > certora/logs/autosetup.log 2>&1 &
 echo $! > certora/logs/autosetup.pid
 ```

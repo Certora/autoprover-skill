@@ -39,9 +39,9 @@ part of running it. Two of its three evals submit real cloud prover jobs and cos
 
 ## Environment
 
-Phase 0 checks `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java 19 or newer, and the
-compilers the target project's pragmas need, and stops with a specific message if one is
-missing. `README.md` has every install command, and `./install.sh` runs them for you.
+Phase 0 checks the machine: `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java 19 or
+newer, and a compiler manager. It stops with a specific message if one is missing.
+`./install.sh` installs the toolchain and places the skill; it installs no compiler.
 
 Two things to know before you stop over them:
 
@@ -50,10 +50,12 @@ Two things to know before you stop over them:
   non-emptiness is checked, never the value, so export a placeholder and move on. Summaries
   are then static only, which weakens the specs built on them; a user with a real key can drop
   `--skip-llm` and pay for the better summaries.
-- The installer downloads no compilers by default. Compilers come from solc-select, through
-  `./install.sh --solc "<versions>"`, `./install.sh --project <path>`, or
-  `solc-select install <version>` directly. Put solc-select's artifact directories on PATH so
-  several versions are reachable at once; `README.md` has the one-line loop.
+- Compilers are a per-project question, answered in Phase 3 rather than at install time. Read
+  the project's resolved build plan (`forge compiler resolve --json -vv` for Foundry,
+  autosetup's own extractor for Hardhat) rather than its pragmas, install what it resolves to
+  with `solc-select install`, select it with `solc-select use`, and pass
+  `--solc-default solc` to autosetup. Omitting that flag is what turns a missing compiler into
+  an unexplained compile failure.
 
 ## House rules for this flow
 
