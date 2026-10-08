@@ -140,7 +140,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
   Never assume a fixed version, and never point the conf's `solc` or `compiler_map` at an absolute path: autosetup reads the compiler's version out of the *name*, so an absolute path leaves it unable to check pragmas, plan a fallback, or generate library harnesses. On Apple silicon 0.8.5 and up are native or universal binaries; below 0.8.5 they are Intel-only and need Rosetta 2, which is the user's call and not yours: stop and ask them to run `softwareupdate --install-rosetta`, which prompts for a license and for admin rights.
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
-- Optional: `certora-cloud` on PATH with a stored login (`references/timeout-resolver.md`). Phase 6 uses it only when a rule times out and the manual fixes are exhausted. Its absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user to install and log in then.
+- Optional: a Zeus API key in `CERTORA_API_KEY` (`references/timeout-resolver.md`). Phase 6 uses it only when a rule times out and the manual fixes are exhausted. Its absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user for a key then.
 
 ## Phase 1 — Design document (optional but valuable)
 
@@ -273,6 +273,6 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
 - Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only).
-- Resolver hooks: for every rule the timeout resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver workflow id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
+- Resolver hooks: for every rule the timeout resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.
