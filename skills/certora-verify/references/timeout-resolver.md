@@ -2,7 +2,7 @@
 
 The timeout resolver is a hosted AutoProver agent. Give it one prover run and one rule of that run. It searches for a pen-and-paper proof of the property and distills the lemmas the proof rests on. It instruments the source with inert hooks that encode those lemmas, discharges the lemmas in Lean, and runs the prover again. It returns patches for the source and the spec, the Lean file, and the evidence that the rule now verifies.
 
-You drive it through the Zeus public API, the same API that drives AutoProver runs. Create a run, poll it, list its artifacts, and download them. Every call is a plain HTTPS request with a Zeus API key.
+You drive it through the Zeus public API, the same API that drives AutoProver runs. Create a run, poll it, read its result, then list and download its artifacts. Every call is a plain HTTPS request with a Zeus API key.
 
 Use it in two cases:
 
@@ -75,7 +75,7 @@ curl -sS "$ZEUS/v2/runs/<run_id>" -H "Authorization: Bearer $CERTORA_API_KEY"
 
 `run.status` is one of `queued`, `running`, `finalizing`, `succeeded`, `failed`, `cancelling`, `cancelled`. Stop polling at `succeeded`, `failed`, or `cancelled`. The other values mean the run is still moving. While it moves, `run.progress.phase` names the current step.
 
-`succeeded` means the agent finished and wrote a result. It does not mean the rule verified. Read `result.json` for that. `failed` means the run did not complete. Then `run.failure` holds `code`, `detail`, and `retryable`. Quote `code` and `detail` in your report. Do not start a new run because `retryable` is true. Ask the user first.
+`succeeded` means the agent finished and wrote a result. It does not mean the rule verified. Read the result document for that. `failed` means the run did not complete. Then `run.failure` holds `code`, `detail`, and `retryable`. Quote `code` and `detail` in your report. Do not start a new run because `retryable` is true. Ask the user first.
 
 To stop a run, cancel it:
 
@@ -90,13 +90,29 @@ The reply is `202`. The run moves through `cancelling` to `cancelled`.
 
 ## Reading the result
 
-List the artifacts once the run is `succeeded`. Before that, the list call answers 409 with code `artifacts_not_ready`.
+Read the result document once the run is `succeeded`. It is not a downloadable artifact, and this route is the only way to read it.
+
+```bash
+curl -sS "$ZEUS/v2/runs/<run_id>/result" -H "Authorization: Bearer $CERTORA_API_KEY"
+```
+
+The reply is an envelope around the document. The fields a client can rely on are `schema_version`, `run_id`, `run_type`, and `data`. The document itself is `data`. Inside `data`, rely on `status`, `message`, `run`, `products`, `outcome`, `compiler_output`, and `error`. A key that is absent is not published. Do not depend on anything else.
+
+Take these from `data`:
+
+- `status` is one of `resolved`, `gave_up`, `unresolved`, `invalid_input`, `dependency_error`, `budget_exhausted`, `cancelled`, `failed`. Only `resolved` means the rule verifies.
+- `message` says why the run ended the way it did.
+- `products` names the files the run wrote.
+- `run.patch_base` names the directory the patches apply in.
+- `outcome` is present for `resolved` and `gave_up`. A `resolved` outcome carries `executive_summary` and `why_sound`. Its `prover` record holds the status of every path of the rule, and the final run link in `outcome.prover.link`. Its `lean` record holds the Lean verdict.
+
+Then list the artifacts. Before the run is `succeeded`, the list call answers 409 with code `artifacts_not_ready`.
 
 ```bash
 curl -sS "$ZEUS/v2/runs/<run_id>/artifacts" -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
-The reply holds `artifacts` and `next_cursor`. Each artifact has `name`, `path`, `category`, `size_bytes`, `last_modified_at`, and `download_url`. The resolver returns five files, so one page holds them all and `next_cursor` is null. Each `download_url` is a presigned link that expires after a short time. Download every file right after you list them. If a download is refused, list again and use the fresh link.
+The reply holds `artifacts` and `next_cursor`. Each artifact has `name`, `path`, `category`, `size_bytes`, `last_modified_at`, and `download_url`. The resolver returns four files, so one page holds them all and `next_cursor` is null. Each `download_url` is a presigned link that expires after a short time. Download every file right after you list them. If a download is refused, list again and use the fresh link.
 
 ```bash
 mkdir -p certora/resolver/<ruleName>
@@ -105,11 +121,10 @@ curl -sS -o "certora/resolver/<ruleName>/<name>" "<download_url>"
 
 Do not send the `Authorization` header to a download link. The link carries its own credentials.
 
-The directory then holds exactly five files:
+The directory then holds exactly four files:
 
-- `result.json`. The `status` field is one of `resolved`, `gave_up`, `unresolved`, `invalid_input`, `dependency_error`, `budget_exhausted`, `cancelled`, `failed`. Only `resolved` means the rule verifies. `message` says why a run ended the way it did. `products` names the files the run wrote. `run.patch_base` names the directory the patches apply in. `outcome` is present for `resolved` and `gave_up`. A `resolved` outcome carries `executive_summary` and `why_sound`. Its `prover` record holds the final run link and the status of every path of the rule. Its `lean` record holds the Lean verdict. `budgets` records the caps the run ran under.
 - `proof.md`. The informal proof the lemmas came from. Present whenever the proof search completed, whatever the status.
-- `source.patch` and `spec.patch`. Unified diffs against the sources the run was submitted with. The `run.patch_base` field of `result.json` names the directory they apply in, relative to the sources root.
+- `source.patch` and `spec.patch`. Unified diffs against the sources the run was submitted with. The `run.patch_base` field of the result document names the directory they apply in, relative to the sources root.
 - `<ruleName>_lemmas.lean`. The Lean development that discharges the lemmas.
 
 For `gave_up`, `unresolved`, or `budget_exhausted`, the rule still times out. Read `proof.md`. The proof often names the lemma that the prover cannot see, and that is a good starting point for a manual summary or a split. Then continue with the manual playbook. Do not weaken the property.
@@ -126,7 +141,7 @@ For `gave_up`, `unresolved`, or `budget_exhausted`, the rule still times out. Re
    The source patch touches helper contracts under `certora/` and sometimes the contracts in the scene. The spec patch adds a CVL summary for each hook and adjusts the rule. Read both before you apply them.
 2. Copy the Lean file to `certora/lean/<ruleName>_lemmas.lean` and keep it with the spec. It is the certificate for the lemmas the hooks assume.
 3. Typecheck, then run the full unfiltered prover run as usual. The completion gate does not change: the resolver's own final run is evidence, not a substitute for your run.
-4. In the commentary file, record the resolver run id and the final run link from `result.json`. Record each hook with its inertness argument from `why_sound`, and the Lean file. In the report, these hooks are trust assumptions discharged in Lean, and the reviewer needs to see them.
+4. In the commentary file, record the resolver run id and the final run link from `outcome.prover.link`. Record each hook with its inertness argument from `why_sound`, and the Lean file. In the report, these hooks are trust assumptions discharged in Lean, and the reviewer needs to see them.
 
 ## Cost
 
