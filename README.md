@@ -211,7 +211,7 @@ over.
 
 | Phase | What happens |
 |---|---|
-| 0. Preflight | Check `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java, the compilers the project's pragmas need, and that the main contract is concrete. Stop with a specific message if anything is missing. |
+| 0. Preflight | Check `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java, a compiler manager and a way to read the project's build plan, and that the main contract is concrete. Stop with a specific message if anything is missing. |
 | 1. Design document | Use a design doc if the user supplied one, otherwise look for one and judge it by content. Build instructions and generic READMEs do not count. Proceeding without one is fine. |
 | 2. Component analysis | Produce `certora/analysis/application.json`: application type, explicit contracts, external actors, and per contract the components with their entry points, state and requirements. The main contract's components are the unit of work for phases 4 to 6. |
 | 3. Scene analysis and setup | Compute the transitive call closure, decide which contracts the prover must model, then run `certora-autosetup` to get a working conf, generated summaries, call resolution and a sanity spec. |
@@ -306,8 +306,7 @@ rest of the Solidity tooling does it:
 
 ```sh
 uv tool install solc-select                          # or pipx, or pip
-env -u VIRTUAL_ENV solc-select install 0.8.27        # the version the project resolves to
-env -u VIRTUAL_ENV solc-select use 0.8.27
+env -u VIRTUAL_ENV solc-select install 0.8.27        # every version the project resolves to
 ```
 
 Which version is not a question about your machine, so the skill answers it per project in
@@ -318,20 +317,17 @@ says what the project actually compiles with. On one real project the resolved p
 0.8.27 while a repository-wide pragma reading adds a second version that must never reach a
 `compiler_map`.
 
-With one compiler selected, the skill passes `--solc-default solc` to autosetup, which pins
-every contract to that bare name and collapses the map back to a scalar, so the conf follows
-whatever solc-select has selected. Leaving the flag off is the trap: autosetup pins its own
-default `solc8.34` into the compiler map while the switch that would let it substitute a
-compiler you do have was already computed as off, so a missing compiler becomes a compile
-failure with no explanation.
+The skill then installs each of those versions and gives it the name autosetup writes into a
+conf. autosetup's only name for a per-contract compiler is the Certora form `solc8.27`
+(`enhanced_config_manager.py:745-761`, with the convention fixed at `autosetup.py:446`), and
+solc-select's store holds `solc-0.8.27`, so Phase 3 builds a directory of aliases, one per
+installed version, and puts it in front of PATH for the run. certoraRun takes those names as
+they are: `solc` and every `compiler_map` value may be a bare name on PATH, an absolute path or
+a cwd-relative path (`certoraValidateFuncs.py:409-420`, `:125-160`), and the version comes from
+running the binary (`CompilerCollectorFactory.py:142-169`), never from parsing its name.
 
-A project that genuinely needs several compilers at once is the exception, and the limit is
-autosetup's rather than certoraRun's: autosetup's only name for a per-contract compiler is the
-Certora form `solc8.27` (`enhanced_config_manager.py:745-761`, with the convention hardcoded at
-`setup_prover.py:259-267`), and solc-select's store holds no such name. certoraRun itself is
-not fussy: `solc` and every `compiler_map` value may be a bare name on PATH, an absolute path
-or a cwd-relative path (`certoraValidateFuncs.py:409-420`, `:125-160`), and the version comes
-from running the binary (`CompilerCollectorFactory.py:142-169`), never from parsing its name.
+Nothing is selected globally, and a project needing several compilers at once is ordinary: the
+conf keeps the per-contract names, so it records which compiler compiled which contract.
 
 Three details worth knowing. `env -u VIRTUAL_ENV` matters because solc-select relocates its
 whole store into `$VIRTUAL_ENV/.solc-select` when that variable is set, and then the artifact
@@ -398,12 +394,11 @@ then wrote `solc8.21` into the conf from the build configuration, found no such 
 its `solc_not_found_fallback`, and the conf it drove came out as `"solc": "solc"`. It compiled
 and submitted four cloud jobs.
 
-Two things that run showed, which the recipe alone does not. `--solc-default solc` does not
-decide the conf's `solc` when the project declares a version: the build configuration wins
-(`build_systems/base.py:113-117`), and what rescues the run is the fallback, which is only
-armed because the conf is pinned. And the fallback rewrites the conf autosetup drives, while
-the sibling confs it also writes (`invariants.conf` and the per-property confs) keep the
-declared `solc8.21`, so those still want that binary by name.
+Two things that run showed, which the recipe alone does not. The conf's compiler comes from the
+build configuration (`build_systems/base.py:113-117`), so the name in the conf is the version
+the project pins, whatever `--solc-default` says. And the missing-compiler fallback rewrites
+only the conf autosetup drives, while the sibling confs it also writes (`invariants.conf` and
+the per-property confs) keep the declared `solc8.21`, so those still want that binary by name.
 
 Read from AutoProver's source rather than measured: that certoraRun accepts absolute compiler
 paths, and that a project declaring no version at all loses the fallback entirely.
@@ -411,7 +406,7 @@ paths, and that a project declaring no version at all loses the fallback entirel
 What has not been tested: no agent has loaded this skill yet, in any harness, and no
 verification run has been driven through this installer from Phase 0 to a report. The Hardhat
 extractor path has not been exercised from this skill against a real Hardhat project, and
-neither has a genuinely multi-compiler project. The
+neither has a genuinely multi-compiler project nor the alias directory Phase 3 builds. The
 per-agent skill directories come from vendor documentation and the skills CLI's own table
 rather than from a run in each agent, so treat the table in
 [Which agents it runs in](#which-agents-it-runs-in) as the claim it is.

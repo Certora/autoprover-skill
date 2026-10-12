@@ -5,8 +5,8 @@ license: GPL-3.0-only
 compatibility: >-
   Requires certoraRun (certora-cli) and certora-autosetup on PATH, a CERTORAKEY for the
   Certora cloud prover, Java 19+, network access to prover.certora.com and
-  docs.certora.com, and a Solidity compiler for the target project, installed and selected
-  with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
+  docs.certora.com, and the Solidity compilers the target project pins, which Phase 3
+  installs with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
   needed: autosetup
   runs with --skip-llm, and the variable it checks at import takes a placeholder.
 metadata:
@@ -155,21 +155,31 @@ With neither available, read the `pragma solidity` line of each file **in the cl
 
 Then intersect with the closure. A version whose files are all tests, scripts or library code outside the closure is not your problem.
 
-**One version over the closure**, which is the common case:
+Install every version the closure resolves to:
 
 ```bash
-env -u VIRTUAL_ENV solc-select install 0.8.27
-env -u VIRTUAL_ENV solc-select use 0.8.27   # ask first: this is global, shared with their other tools
-solc --version                              # must report the version you chose
+env -u VIRTUAL_ENV solc-select install 0.8.17 0.8.21
 ```
 
-and add `--solc-default solc` to the autosetup command below. That flag is load-bearing in both directions. With it, autosetup pins every contract to the bare name `solc` and collapses the uniform map back to a scalar, so the conf compiles with whatever solc-select has selected. Without it, autosetup pins its own default `solc8.34` into the compiler map while the flag that would let it substitute a compiler you *do* have was already computed as off, so a missing compiler becomes a compile failure with no explanation instead of a clear error.
+Then give each one the name autosetup writes. Its only name for a per-contract compiler is the Certora form `solc8.17` (`enhanced_config_manager.py:745-761`, the convention fixed at `autosetup.py:446`), while solc-select's store holds `solc-0.8.17`. A directory of aliases bridges the two:
 
-**Several versions over the closure**: say so to the user, with the file lists, before spending anything. Try single-compiler first with the newest version every closure pragma admits; different pragmas are not the same thing as an unsatisfiable set, and autosetup says clearly when one compiler is not enough (`UnsatisfiableSolcPinError` names the contract and its pragma; `ConflictingPragmaError` means one compilation unit spans files no single compiler satisfies). If it genuinely needs several at once, stop and hand it back: autosetup's only name for a per-contract compiler is the Certora form `solc8.27`, solc-select's store holds no such name, and giving those names a home changes the user's PATH, which is their call and not yours.
+```bash
+bin=<project_root>/certora/solc-bin                     # a path with no space in it
+mkdir -p "$bin"
+ln -sf "$HOME/.solc-select/artifacts/solc-0.8.17/solc-0.8.17" "$bin/solc8.17"
+export PATH="$bin:$PATH"
+solc8.17 --version                                      # must report 0.8.17
+```
 
-One thing to watch after autosetup finishes. When the project declares its own version, the conf carries the Certora-form name (`solc8.21`) rather than the bare `solc`, whatever `--solc-default` said, and what rescues a run on a machine without that binary is the missing-compiler fallback. That fallback rewrites the conf autosetup drives, but the sibling confs it writes alongside (`invariants.conf`, the per-property confs) keep the declared name. If a later `certoraRun` on one of those reports `Solidity executable solc8.X not found in path`, that is why: set its `solc` to the name your compiler actually answers to.
+One alias per installed version, named by dropping the leading `0.`: `0.8.17` becomes `solc8.17`, `0.7.6` becomes `solc7.6`. The path must hold no space, because certoraRun builds the compiler command as one string and splits it on whitespace; if the project path holds one, build the directory under `$HOME` instead, and if that holds one too, stop and say so. Export the PATH in the shell that runs autosetup and every later certoraRun. Nothing outside the run changes, and no compiler is selected globally.
 
-Record what you found in `certora/analysis/compilers.json` (`source`, `versions`, `closure_versions`, `selected`, `mode`) so a resumed run does not derive it twice.
+Leave `--solc-default` off the autosetup command below, so autosetup writes the per-contract names the build plan resolved to and the aliases answer to them. The conf then says which compiler compiled which contract. The flag only supplies a name for contracts nothing else pins (`compilation_workarounds.py:337-349`); the bare `solc` makes every entry read `solc`, and the conf follows whatever the machine selected last.
+
+**Several versions over the closure** is not a problem to avoid: install them all and let `compiler_map` carry them. Never put a newer compiler in place of a version the plan pinned, however wide the pragmas are, because the run would then answer for a build nobody ships. Two cases stop the run before it submits a job, and autosetup names both: a version that cannot be provisioned at all (`UnsatisfiableSolcPinError`, with the contract and its pragma), and one compilation unit whose files no single compiler satisfies (`ConflictingPragmaError`).
+
+When autosetup finishes, read the compiler names out of the conf it drove and out of the siblings beside it (`invariants.conf`, the per-property confs), and check each against the alias directory. A later `certoraRun` reporting `Solidity executable solc8.X not found in path` means that alias is missing: add the alias rather than retarget the conf at another compiler. A name no alias covers is autosetup's own default (`solc8.34`) reaching a contract the build plan did not cover; install that version and alias it too.
+
+Record what you found in `certora/analysis/compilers.json`: `source` (resolved plan or pragma reading), `versions`, `closure_versions`, `alias_dir`, and `aliases` as alias name to the version its binary reports. On resume, run `<alias> --version` for every entry and rebuild any alias that is missing or answers with a different version, instead of trusting the record.
 
 Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **detached** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
 
@@ -177,7 +187,6 @@ Then build the prover setup with **certora-autosetup** (a tool that automates th
 cd <project_root>
 nohup certora-autosetup --main-contract <rel_path>:<Main> \
   <rel_path>:<Main> <closure .sol files...> --no-strip-contracts --skip-llm \
-  --solc-default solc \
   > certora/logs/autosetup.log 2>&1 &
 echo $! > certora/logs/autosetup.pid
 ```
