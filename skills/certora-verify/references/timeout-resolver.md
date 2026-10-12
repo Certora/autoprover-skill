@@ -13,7 +13,7 @@ Do not use it for `VIOLATED`, `SANITY_FAILED`, or `ERROR`. Those have their own 
 
 ## What it needs
 
-- A Certora API key in the environment variable `CERTORA_API_KEY`. The user creates the key on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. The key needs the permissions "Create runs", "Read runs and results", and "Cancel runs". The Runs API also needs a plan that includes it. This is not `CERTORAKEY`, the prover key. If the variable is empty, stop and ask the user for a key. Never print the key.
+- A Certora API key in the environment variable `CERTORA_API_KEY`. The user creates the key on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. Tick four permissions: "Create runs", "Read runs and results", "Cancel runs", and "Download artifacts". Permissions cannot be changed after the key is created. A key without "Download artifacts" completes the paid run and then cannot fetch one file. The Runs API also needs a plan that includes it. This is not `CERTORAKEY`, the prover key. If the variable is empty, stop and ask the user for a key. Never print the key.
 - The API host. Production is `https://app.certora.com`. The dev and staging hosts are for Certora staff. The commands below keep the host in `CERTORA_API_BASE_URL`, the name the API's own documentation uses.
 - The run link that `certoraRun` printed, on `prover.certora.com`. Remove the `anonymousKey` part. The service strips it in any case. The run and the key must belong to the same environment. A key from `app.certora.com` resolves runs on `prover.certora.com` and nothing else.
 - The rule name, and the property the rule formalizes: its `title`, `description`, and `sort` from `certora/properties/<slug>.properties.json`. The `rules` list in `certora/properties/<slug>.property_rules.json` maps the property to its rules.
@@ -116,7 +116,7 @@ Take these from `result.data`:
 
 - `status` is one of `resolved`, `gave_up`, `unresolved`, `invalid_input`, `dependency_error`, `budget_exhausted`, `cancelled`, `failed`. Only `resolved` means the rule verifies. The last two do not reach this route. The run's own status reports them.
 - `message` says why the run ended the way it did.
-- `products` names the files the run wrote.
+- `products` names the files the run wrote, as `proof`, `patches` (a list of names) and `lean_file`.
 - `run.patch_base.run_dir` names the directory the patches apply in.
 - `outcome` is present for `resolved` and `gave_up`. A `resolved` outcome carries `executive_summary` and `why_sound`. Its `prover` record holds the status of every path of the rule, and the final run link in `outcome.prover.link`. Its `lean` record holds the Lean verdict.
 
@@ -126,7 +126,7 @@ Then list the artifacts. Before the run is `succeeded`, the list call answers 40
 curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/artifacts" -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
-The reply holds `artifacts` and `next_cursor`. Each artifact has `name`, `path`, `category`, `size_bytes`, `last_modified_at`, and `download_url`. The resolver returns four files, so one page holds them all and `next_cursor` is null. Each `download_url` is a presigned link that expires after a short time. Download every file right after you list them. If a download is refused, list again and use the fresh link.
+The reply holds `artifacts` and `next_cursor`. Each artifact has `name`, `path`, `category`, `size_bytes`, `last_modified_at`, and `download_url`. A page holds the resolver's public files found in that page of everything the run stored. The run's other objects are private, so a page can hold none of the public files. `next_cursor` is non-null while objects remain. Download what the page holds, then list again with `?cursor=<next_cursor>`, until `next_cursor` is null. Each `download_url` is a presigned link that expires after a short time, so download each page before you list the next one. If a download is refused, list that page again and use the fresh link. Then check what you collected against `products`.
 
 ```bash
 mkdir -p certora/resolver/<ruleName>
@@ -135,11 +135,11 @@ curl -sS -o "certora/resolver/<ruleName>/<name>" "<download_url>"
 
 Do not send the `Authorization` header to a download link. The link carries its own credentials.
 
-The directory then holds exactly four files:
+The directory then holds the files `products` names:
 
 - `proof.md`. The informal proof the lemmas came from. Present whenever the proof search completed, whatever the status.
-- `source.patch` and `spec.patch`. Unified diffs against the sources the run was submitted with. The `run.patch_base` field of the result document names the directory they apply in, relative to the sources root.
-- `<ruleName>_lemmas.lean`. The Lean development that discharges the lemmas.
+- `source.patch` and `spec.patch`. Unified diffs against the sources the run was submitted with. A side that did not change gets no patch, so `products.patches` names one of the two, both, or neither.
+- `<ruleName>_lemmas.lean`. The Lean development that discharges the lemmas. `products.lean_file` is null on a run that reached no Lean proof.
 
 For `gave_up`, `unresolved`, or `budget_exhausted`, the rule still times out. Read `proof.md`. The proof often names the lemma that the prover cannot see, and that is a good starting point for a manual summary or a split. Then continue with the manual playbook. Do not weaken the property.
 
@@ -147,7 +147,7 @@ For `invalid_input`, the request did not match the run. Read `message` and corre
 
 ## Applying a resolution
 
-1. Apply the patches inside the directory `run.patch_base.run_dir` names, relative to the project root. `.` means the project root itself.
+1. Apply the patches that `products.patches` names, inside the directory `run.patch_base.run_dir` names, relative to the project root. `.` means the project root itself. A patch the list does not name is not on disk, so do not run `git apply` on it.
 
    ```bash
    git apply -p1 --directory=<run_dir> certora/resolver/<ruleName>/source.patch
@@ -161,4 +161,4 @@ For `invalid_input`, the request did not match the run. Read `message` and corre
 
 ## Cost
 
-A resolver run is charged to your organization's balance. At launch the service holds a fixed amount, and at settlement it refunds the unused part. Start one resolver run per rule, not one per iteration. If a rule times out again after a resolution, go back to the manual playbook before starting a second run.
+A resolver run is charged to your organization's balance. At launch the service holds a fixed amount, and at settlement it refunds the unused part. `run.billing.reserved_usd` is the hold and `run.billing.charged_usd` the settled charge. Start one resolver run per rule, not one per iteration. If a rule times out again after a resolution, go back to the manual playbook before starting a second run.
