@@ -81,20 +81,20 @@ another tool owns, `--autoprover-ref <ref>` builds from a different AutoProver c
 
 `install.sh` installs `ai-composer` from a **fixed AutoProver commit**, not from `master`, so
 two people installing a month apart get the same `certora-autosetup` behaviour that SKILL.md
-documents. The commit lives in one variable at the top of the script:
+documents. The commit lives in one file beside the skill, which the script reads:
 
 ```sh
-AUTOPROVER_REF="<40-character commit sha>"
+cat skills/certora-verify/AUTOPROVER_REF   # a 40-character commit sha, on one line
 ```
 
-To take a newer AutoProver, replace that SHA and re-run the installer:
+To take a newer AutoProver, write the new SHA into that file and re-run the installer:
 
 ```sh
 git -C /path/to/AutoProver fetch origin && git -C /path/to/AutoProver rev-parse origin/master
 # or, with no local clone:
 git ls-remote https://github.com/Certora/AutoProver master
 
-# edit AUTOPROVER_REF in install.sh, then
+# write the SHA into skills/certora-verify/AUTOPROVER_REF, then
 ./install.sh --deps-only --reinstall
 ```
 
@@ -120,10 +120,13 @@ off with the command that owns it, and `uv tool list` shows what uv is holding, 
 everything the installer put on your PATH.
 
 ```sh
-uv tool uninstall ai-composer solc-select   # the toolchain
 solc-select uninstall 0.8.34                # one compiler, from the store slither shares
+uv tool uninstall ai-composer solc-select   # the toolchain
 rm ~/.agents/skills/certora-verify          # the skill, per agent directory it was written to
 ```
+
+Compilers come off first. `solc-select uninstall` is the only command that knows the store, and
+the line below it removes `solc-select` itself.
 
 The certora-cli commands come from the same uv tool, so `uv tool uninstall` takes them with
 it. The installer writes to no shell startup file, so there is nothing to undo there.
