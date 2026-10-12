@@ -22,7 +22,7 @@ a suspected bug, or retired with a written reason.
 
 ## Which agents it runs in
 
-The skill is one `SKILL.md` plus four reference files, so any agent that loads skills from a
+The skill is one `SKILL.md` plus five reference files, so any agent that loads skills from a
 directory can run it. **No agent has loaded it yet.** The directories below are where each
 agent looks, and `install.sh` writes the files there; nobody has started one of these agents
 and watched it pick the skill up.
@@ -61,7 +61,7 @@ cd autoprover-skill
 ```
 
 `install.sh` installs the toolchain the skill drives and links the skill into every agent
-skill directory it finds on the machine. It does not set `CERTORAKEY` or `ANTHROPIC_API_KEY`;
+skill directory it finds on the machine. It does not set `CERTORAKEY`, `ANTHROPIC_API_KEY` or `CERTORA_API_KEY`;
 those are yours to export. See [Requirements](#requirements) for what each piece is for.
 
 **It downloads no Solidity compilers by default.** It sets up solc-select and the `solcX.Y`
@@ -204,7 +204,7 @@ for, which file to read, and what the environment has to provide. Agents that re
 automatically will pick it up on their own once the repo is in the working tree.
 
 Failing that, paste `skills/certora-verify/SKILL.md` into the agent's context or system
-prompt. It is self-contained apart from the four files under `references/`, which it names as
+prompt. It is self-contained apart from the five files under `references/`, which it names as
 each phase needs them.
 
 ## What it does
@@ -297,6 +297,11 @@ as `openjdk-21-jdk` does the job.
 goes. Phases 3, 5 and 6 submit real cloud jobs. A single full run takes tens of minutes and
 can run up to the two hour job timeout, and a verification of a real protocol runs many of
 them. Do not start one on a metered account without knowing what it will cost.
+
+**`CERTORA_API_KEY`.** The organization API key of the Certora Runs API. Create it on the
+organization's API Access page at `app.certora.com`. Tick "Create runs", "Read runs and
+results", "Cancel runs" and "Download artifacts". It is not `CERTORAKEY`. Phase 6 needs it
+only for the hosted Timeout Resolver, so a run with no timeout never asks for it.
 
 **`ANTHROPIC_API_KEY`.** `certora-autosetup` makes its own LLM calls, and it checks the
 variable while importing its summary module, so the binary exits 1 without it even for

@@ -7,7 +7,9 @@ compatibility: >-
   Certora cloud prover, an ANTHROPIC_API_KEY variable for autosetup, which checks only that
   it is non-empty (a real key is what buys LLM-derived summaries), Java 19+,
   network access to prover.certora.com and docs.certora.com, and the solc compilers the
-  target project's pragmas require, on PATH under the solcX.Y naming convention.
+  target project's pragmas require, on PATH under the solcX.Y naming convention. For the
+  hosted Timeout Resolver that Phase 6 can fall back on, also a CERTORA_API_KEY and network
+  access to app.certora.com.
 metadata:
   version: "0.1.0"
   author: certora

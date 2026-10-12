@@ -52,6 +52,10 @@ Two things to know before you stop over them:
   Anthropic key can export a placeholder and pass `--skip-llm`, which turns off every LLM call
   autosetup makes. Summaries are then static-only, which weakens every spec built on them, so
   it is a fallback you choose deliberately and say out loud, never the default.
+- `CERTORA_API_KEY` is the organization API key of the Certora Runs API, and it is not
+  `CERTORAKEY`. Phase 6 uses it only for the hosted Timeout Resolver, so a run with no
+  timeout never asks for it. `references/timeout-resolver.md` lists the four permissions
+  the key needs.
 - The installer downloads no compilers by default. Compilers arrive through
   `./install.sh --solc "<versions>"`, `./install.sh --project <path>`, or the `solc-bridge`
   command the installer writes. `solc-bridge` exists only on a machine where `install.sh` ran;
