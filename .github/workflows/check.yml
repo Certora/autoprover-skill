@@ -30,9 +30,10 @@ jobs:
             python3 -m pip install --quiet --disable-pip-version-check shellcheck-py
           shellcheck --version | sed -n 2p
 
-      # A clone is all a user gets. Everything the README tells them to run has
-      # to be in it, and install.sh has to be executable in the index.
-      - name: Everything the install routes need is tracked
+      # A clone is all a user gets. Everything the README tells them to run and
+      # every file the skill reads has to be in it, and install.sh has to be
+      # executable in the index.
+      - name: Everything a clone needs is tracked
         run: |
           set -eu
           missing=0
@@ -44,7 +45,13 @@ jobs:
                    .claude-plugin/marketplace.json \
                    .agents/plugins/marketplace.json \
                    skills/certora-verify/SKILL.md \
-                   skills/certora-verify/AUTOPROVER_REF; do
+                   skills/certora-verify/AUTOPROVER_REF \
+                   skills/certora-verify/references/autosetup.md \
+                   skills/certora-verify/references/cvl-writing.md \
+                   skills/certora-verify/references/cvl-pitfalls.md \
+                   skills/certora-verify/references/prover-loop.md \
+                   skills/certora-verify/references/timeout-resolver.md \
+                   skills/certora-verify/evals/evals.json; do
             if [ -z "$(git ls-files -- "$f")" ]; then
               echo "::error file=$f::$f is not tracked, so a clone will not have it"
               missing=1

@@ -8,7 +8,9 @@ compatibility: >-
   docs.certora.com, and the Solidity compilers the target project pins, which Phase 3
   installs with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
   needed: autosetup
-  runs with --skip-llm, and the variable it checks at import takes a placeholder.
+  runs with --skip-llm, and the variable it checks at import takes a placeholder. For the
+  hosted Timeout Resolver that Phase 6 can fall back on, also a CERTORA_API_KEY and network
+  access to app.certora.com.
 metadata:
   version: "0.1.0"
   author: certora
@@ -55,7 +57,7 @@ Every phase writes its result under the project's `certora/` directory, so an in
 | `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md`, `certora/properties/<slug>.judge-round<N>.md` | Phase 6 |
 | `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
 
-Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
+Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
 Long-running commands (autosetup, and every full certoraRun) take tens of minutes to ~2h, longer than a single foreground command should hold your session. **Start them detached and poll their log.** The portable formulation needs nothing but a shell:
 
@@ -273,6 +275,7 @@ Consult the docs pages while authoring — particularly Methods Block/summaries,
 - Build the `property_rules` mapping (every non-skipped property title → the rule/invariant name(s) that verify it) and persist it to `certora/properties/<slug>.property_rules.json` — it gates completion and feeds the report, so it must survive a restart.
 - Typecheck first: `certoraRun <conf> --compilation_steps_only` (fast ~1 min); fix all type/parse errors before anything else (the judge assumes the spec typechecks).
 - Then prove: build the conf as the setup base plus the overlay defined in `references/prover-loop.md` (single source of truth for the overlay; it includes `wait_for_results: "all"`, load-bearing because the base conf ships `wait_for_results: none`). Run certoraRun (mechanics, status parsing, counterexample extraction all in that reference). For each non-verified rule, analyze the trace, classify the root cause, and apply the remediation playbook there: missing-invariant `requireInvariant`, sound summaries for havocs (never `NONDET` on side-effecting functions, never `persistent` ghosts to dodge a havoc), `filtered` blocks at ~95% certainty, expected-failure for a rule that exposes a genuine bug OR that fails only due to an exhausted prover limitation (record which), skip for genuinely-invalid properties, contradictory-`require` hunt for sanity failures.
+- A rule that still ends TIMEOUT after the playbook's scope reductions can go to the hosted Timeout Resolver: one call per rule with the run link and the property, as `references/timeout-resolver.md` describes. Apply its patches, keep its Lean file, and re-run the full unfiltered run yourself. A resolver result other than `resolved` leaves the rule a TIMEOUT: read its informal proof for the missing lemma, then continue by hand.
 - Iterate write→prove yourself until the full unfiltered run is clean (all VERIFIED or expected-to-fail) or you've exhausted principled fixes. Write the per-component commentary (`certora/properties/<slug>.commentary.md`). **Hand over** the final spec, `property_rules`, the full prover status (including expected-fail markings + reasons), and any structural-invariant requests, then stop generating and let the judging pass take over; generation never reviews its own work in the same pass.
 
 ### Judge inputs (the judge role)
@@ -295,5 +298,6 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
 - Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only).
+- Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.
