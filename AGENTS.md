@@ -53,9 +53,9 @@ Two things to know before you stop over them:
 - Compilers are a per-project question, answered in Phase 3 rather than at install time. Read
   the project's resolved build plan (`forge compiler resolve --json -vv` for Foundry,
   autosetup's own extractor for Hardhat) rather than its pragmas, install what it resolves to
-  with `solc-select install`, select it with `solc-select use`, and pass
-  `--solc-default solc` to autosetup. Omitting that flag is what turns a missing compiler into
-  an unexplained compile failure.
+  with `solc-select install`, and reach each version through a directory of aliases named the
+  way autosetup names a compiler in a conf, put in front of PATH for the run alone. Nothing is
+  selected globally, and the conf keeps the per-contract names.
 
 ## House rules for this flow
 
