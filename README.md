@@ -15,14 +15,15 @@ a suspected bug, or retired with a written reason.
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
   <a href="skills/certora-verify/SKILL.md"><img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat" alt="version 0.1.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
-  <img src="https://img.shields.io/badge/access-Certora_internal-critical?style=flat" alt="private repository">
+  <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
+  <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
 </p>
 
 </div>
 
 ## Which agents it runs in
 
-The skill is one `SKILL.md` plus five reference files, so any agent that loads skills from a
+The skill is one `SKILL.md` plus four reference files, so any agent that loads skills from a
 directory can run it. **No agent has loaded it yet.** The directories below are where each
 agent looks, and `install.sh` writes the files there; nobody has started one of these agents
 and watched it pick the skill up.
@@ -39,7 +40,7 @@ and watched it pick the skill up.
 
 OpenAI's own Codex documentation lists `.agents/skills` (walking up from the working
 directory), `~/.agents/skills` and `/etc/codex/skills`, and does not mention `~/.codex/skills`.
-Installing to both covers it, which is what `./install.sh --target codex --target agents`
+Installing to both covers it, which is what `./install.sh --dir ~/.codex/skills --dir ~/.agents/skills`
 does.
 
 Two things the skill needs from the host agent regardless of which one it is: a shell that can
@@ -49,60 +50,51 @@ Sub-agents are used when available and are not required.
 
 ## Install
 
-The repository is private, so clone it with credentials you already have:
-
 ```sh
-gh repo clone Certora/autoprover-skill
-# or, over SSH:
-git clone git@github.com:Certora/autoprover-skill.git
-
+git clone https://github.com/Certora/autoprover-skill.git
 cd autoprover-skill
 ./install.sh
 ```
 
 `install.sh` installs the toolchain the skill drives and links the skill into every agent
-skill directory it finds on the machine. It does not set `CERTORAKEY`, `ANTHROPIC_API_KEY` or `CERTORA_API_KEY`;
-those are yours to export. See [Requirements](#requirements) for what each piece is for.
+skill directory it finds on the machine. It does not set `CERTORAKEY`; that one is yours to
+export. See [Requirements](#requirements) for what each piece is for.
 
-**It downloads no Solidity compilers by default.** It sets up solc-select and the `solcX.Y`
-bridge, and compilers arrive only when you ask for them:
+**It installs no Solidity compiler.** It installs
+[solc-select](https://github.com/crytic/solc-select), which manages them, and stops there:
+which compilers a project needs is a property of that project, so the skill reads the
+project's build configuration and installs what it resolves to, in Phase 3.
+
+Run it with stdin closed to see the whole plan without changing anything:
 
 ```sh
-./install.sh --solc "0.8.34 0.8.30 0.7.6"   # named versions
-./install.sh --project ~/code/my-protocol   # whatever that project's pragmas need
+./install.sh </dev/null
 ```
 
-Both flags work on their own later too, through `./install.sh --bridge-only` or the
-`solc-bridge` command the installer writes. With no compiler bridged, the installer says so
-and names those two flags rather than reporting a green install.
-
-Other options worth knowing: `--dry-run` prints the whole plan and changes nothing,
-`--skill-only` and `--deps-only` split the two halves, `--target <agent>` writes one agent's
-skill directory instead of all of them, `--copy` copies the skill instead of symlinking it,
-`--append-path` appends the PATH line to your shell rc instead of printing it for you,
-`--reinstall` re-resolves the toolchain, `--bin-dir <path>` puts the compiler symlinks and
-`solc-bridge` somewhere other than the uv bin directory, `--no-anthropic-key` prints the
-static-only fallback recipe for a machine with no Anthropic key, and `--self-test` runs the
-plan and error-path checks without touching the network. `./install.sh --help` lists them all.
+The options: `--skill-only` and `--deps-only` split the two halves, `--dir <path>` writes the
+skill somewhere specific instead of the detected directories, `--copy` copies it instead of
+symlinking, `--reinstall` re-resolves the toolchain and lets uv take over command names
+another tool owns, `--autoprover-ref <ref>` builds from a different AutoProver commit, and
+`--yes` answers every prompt. `./install.sh --help` lists them all.
 
 ### The AutoProver pin
 
 `install.sh` installs `ai-composer` from a **fixed AutoProver commit**, not from `master`, so
 two people installing a month apart get the same `certora-autosetup` behaviour that SKILL.md
-documents. The commit lives in one variable at the top of the script:
+documents. The commit lives in one file beside the skill, which the script reads:
 
 ```sh
-AUTOPROVER_REF="<40-character commit sha>"
+cat skills/certora-verify/AUTOPROVER_REF   # a 40-character commit sha, on one line
 ```
 
-To take a newer AutoProver, replace that SHA and re-run the installer:
+To take a newer AutoProver, write the new SHA into that file and re-run the installer:
 
 ```sh
 git -C /path/to/AutoProver fetch origin && git -C /path/to/AutoProver rev-parse origin/master
 # or, with no local clone:
 git ls-remote https://github.com/Certora/AutoProver master
 
-# edit AUTOPROVER_REF in install.sh, then
+# write the SHA into skills/certora-verify/AUTOPROVER_REF, then
 ./install.sh --deps-only --reinstall
 ```
 
@@ -120,15 +112,24 @@ git ls-remote https://github.com/Certora/AutoProver master
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-verify`. |
 | toolchain, after a pin bump | `./install.sh --deps-only --reinstall`. |
 
-### Uninstall
+### Removing it again
+
+There is no uninstall subcommand, deliberately: everything it would delete is shared with
+other tools on the machine, and getting that wrong costs a user their files. Each piece comes
+off with the command that owns it, and `uv tool list` shows what uv is holding, which is
+everything the installer put on your PATH.
 
 ```sh
-./install.sh --uninstall --dry-run   # list what would be removed
-./install.sh --uninstall
+solc-select uninstall 0.8.34                # one compiler, from the store slither shares
+uv tool uninstall ai-composer solc-select   # the toolchain
+rm ~/.agents/skills/certora-verify          # the skill, per agent directory it was written to
 ```
 
-It reverses what the installer created. Run the dry run first and read the list: the compiler
-store, the uv tool tree and uv itself are shared with other tools on the machine.
+Compilers come off first. `solc-select uninstall` is the only command that knows the store, and
+the line below it removes `solc-select` itself.
+
+The certora-cli commands come from the same uv tool, so `uv tool uninstall` takes them with
+it. The installer writes to no shell startup file, so there is nothing to undo there.
 
 ### Manual install
 
@@ -159,16 +160,15 @@ to match the `name` in the frontmatter.
 This installs the skill only. The toolchain it drives is still yours to set up: see
 [Requirements](#requirements), which gives every command `install.sh` would have run.
 
-The [`skills` CLI](https://github.com/vercel-labs/skills) also handles private repositories, by
-reusing your git or `gh` credentials. The SSH form is the most reliable one for this repo:
+The [`skills` CLI](https://github.com/vercel-labs/skills) installs a skill from any GitHub
+repository:
 
 ```sh
-DO_NOT_TRACK=1 npx skills add git@github.com:Certora/autoprover-skill.git
+npx skills add Certora/autoprover-skill
 ```
 
-Nobody has run that against this repository yet. The CLI documents the SSH source form and the
-private-repo fallbacks (git credential helper, then `gh repo clone`, then SSH); if it fails,
-the symlink above does the same job.
+Nobody has run that against this repository yet; if it fails, the symlink above does the same
+job.
 
 ### Claude Code plugin
 
@@ -182,20 +182,16 @@ claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-verify@certora-skills
 ```
 
-Claude Code's plugin documentation says private repositories are supported and that these
-commands reuse your existing git credential helpers; `owner/repo` shorthand clones over SSH
-unless you set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`. That route has not been run against this
-repository, so treat it as the documented path rather than a tested one. What is checked here:
-`claude plugin validate .` passes on this checkout, and CI keeps the three manifests agreeing
-on name, version and license.
+That route has not been run against this repository, so treat it as the documented path rather
+than a tested one. What is checked here: `claude plugin validate .` passes on this checkout,
+and CI keeps the three manifests agreeing on name, version and license.
 
 VS Code and Copilot add an agent-plugins marketplace through their own plugin interface rather
 than through a command given here; `.agents/plugins/marketplace.json` is what makes this repo a
 valid source for that, and it is untested as well.
 
-A plugin install gives you the skill and nothing else. The toolchain, the compilers and the
-`solc-bridge` command still come from `install.sh` or from the manual commands in
-[Requirements](#requirements).
+A plugin install gives you the skill and nothing else. The toolchain and the compilers still
+come from `install.sh` or from the manual commands in [Requirements](#requirements).
 
 ### Agents with no skill support
 
@@ -204,7 +200,7 @@ for, which file to read, and what the environment has to provide. Agents that re
 automatically will pick it up on their own once the repo is in the working tree.
 
 Failing that, paste `skills/certora-verify/SKILL.md` into the agent's context or system
-prompt. It is self-contained apart from the five files under `references/`, which it names as
+prompt. It is self-contained apart from the four files under `references/`, which it names as
 each phase needs them.
 
 ## What it does
@@ -215,7 +211,7 @@ over.
 
 | Phase | What happens |
 |---|---|
-| 0. Preflight | Check `certoraRun`, `certora-autosetup`, `CERTORAKEY`, `ANTHROPIC_API_KEY`, the `solcX.Y` binaries the project's pragmas need, and that the main contract is concrete. Stop with a specific message if anything is missing. |
+| 0. Preflight | Check `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java, a compiler manager and a way to read the project's build plan, and that the main contract is concrete. Stop with a specific message if anything is missing. |
 | 1. Design document | Use a design doc if the user supplied one, otherwise look for one and judge it by content. Build instructions and generic READMEs do not count. Proceeding without one is fine. |
 | 2. Component analysis | Produce `certora/analysis/application.json`: application type, explicit contracts, external actors, and per contract the components with their entry points, state and requirements. The main contract's components are the unit of work for phases 4 to 6. |
 | 3. Scene analysis and setup | Compute the transitive call closure, decide which contracts the prover must model, then run `certora-autosetup` to get a working conf, generated summaries, call resolution and a sanity spec. |
@@ -240,8 +236,8 @@ it installs from the git URL at the pinned commit:
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
 GIT_CONFIG_VALUE_0='git@github.com:' \
-uv tool install --python 3.12 \
-  'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@e6f9e2e4706225adb07178c1866ad61b4d827424'
+uv tool install --python 3.12 --with-executables-from certora-cli \
+  "ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@$(cat skills/certora-verify/AUTOPROVER_REF)"
 ```
 
 The `GIT_CONFIG_*` variables are load bearing. AutoProver's `graphcore` submodule is recorded
@@ -252,24 +248,14 @@ that extra, so without it the environment has no prover CLI at all. Do not add t
 extra; nothing on the autosetup path imports it, and it pulls in torch and the CUDA wheels.
 Expect a large install: 164 packages, about 736 MB, several minutes on a cold cache.
 
-**`certoraRun`.** The command above does not put it on PATH. `uv tool install` links the
-console scripts of the package you named, so `ai-composer`'s scripts are linked and
-`certora-cli`'s stay inside the tool environment, unreachable. The extra did install
-`certora-cli` there, so the fix is to link those scripts out rather than install a second copy:
+**`certoraRun`.** `--with-executables-from certora-cli` is what puts it on PATH. Without that
+flag `uv tool install` links the console scripts of the package you named and leaves
+`certora-cli`'s inside the tool environment, unreachable; with it, uv links all nine of them
+and records them in the same receipt, so `uv tool uninstall ai-composer` takes them back too.
+No second copy of certora-cli exists to drift.
 
-```sh
-tooldir=$(uv tool dir)/ai-composer
-bindir=$(uv tool dir --bin)
-for c in certoraRun certoraEVMProver certoraMutate certoraEqCheck certoraRanger \
-         certoraCVLFormatter certoraSolanaProver certoraSorobanProver certoraSuiProver; do
-  [ -x "$tooldir/bin/$c" ] && ln -sfn "$tooldir/bin/$c" "$bindir/$c"
-done
-```
-
-`install.sh` does this, reading the script names out of the installed distribution rather than
-from a list, so the `certoraRun` on your PATH is always the one `ai-composer` resolved. A plain
-`uv tool install certora-cli` also works and is what to use if you want certora-cli on its own,
-at the cost of a second copy that can drift to a different version.
+If uv answers `Executables already exist`, a standalone `certora-cli` tool already owns those
+names: remove it with `uv tool uninstall certora-cli`, or add `--force` to let uv take them.
 
 **PATH.** One directory has to be on it:
 
@@ -277,13 +263,9 @@ at the cost of a second copy that can drift to a different version.
 export PATH="$(uv tool dir --bin):$PATH"
 ```
 
-That is normally `~/.local/bin`. It holds `certora-autosetup`, `certoraRun`, `solc-select`, the
-`solcX.Y` compiler names and the `solc-bridge` command, because the installer puts the compiler
-symlinks beside the commands rather than in a directory of their own. `uv tool install
-solc-select` also drops a `solc` shim there, which exits with a Python traceback until someone
-runs `solc-select use`, so the installer chooses a global version when the user has not, which
-is what makes the bare `solc` name work for autosetup's last-resort fallback. The installer
-prints the export line; `--append-path` appends it to your shell rc for you.
+That is normally `~/.local/bin`, and it holds `certora-autosetup`, `certoraRun` and
+`solc-select`, plus the `solc` that solc-select dispatches to the version you selected. The
+installer prints the line; adding it to a startup file is yours to do.
 
 **Java.** `certora-cli` ships jars and shells out to them. `certoraRun` on its own only warns
 when Java is absent and skips local CVL typechecking, but `certora-autosetup` runs
@@ -298,78 +280,61 @@ goes. Phases 3, 5 and 6 submit real cloud jobs. A single full run takes tens of 
 can run up to the two hour job timeout, and a verification of a real protocol runs many of
 them. Do not start one on a metered account without knowing what it will cost.
 
-**`CERTORA_API_KEY`.** The organization API key of the Certora Runs API. Create it on the
-organization's API Access page at `app.certora.com`. Tick "Create runs", "Read runs and
-results", "Cancel runs" and "Download artifacts". It is not `CERTORAKEY`. Phase 6 needs it
-only for the hosted Timeout Resolver, so a run with no timeout never asks for it.
+**`ANTHROPIC_API_KEY`. Not required.** The skill runs `certora-autosetup --skip-llm`, which
+switches off every LLM call it would make (`setup_prover.py:1526` sets
+`enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it), so the
+verification flow makes no Anthropic calls and needs no Anthropic account.
 
-**`ANTHROPIC_API_KEY`.** `certora-autosetup` makes its own LLM calls, and it checks the
-variable while importing its summary module, so the binary exits 1 without it even for
-`--help`. The check is that the value is non-empty; it never tries the key
-(`certora_autosetup/setup/setup_summaries.py:70-93`). A `.env` file in the current working
-directory is loaded instead, and then the variable is not checked at all.
-
-Someone with no Anthropic key can still run autosetup: export any non-empty placeholder and
-pass `--skip-llm`, which switches off every LLM call (`setup_prover.py:1526` sets
-`enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it). The price is
-real: summaries are then static-only, so the hard-to-verify library functions that most need an
-LLM-written summary get none, and every spec downstream inherits the weaker setup. It is a
-fallback to choose deliberately and say out loud, never the default. With a real key, use the
-key.
-
-**solc.** Nothing in the install ships a Solidity compiler, and the installer downloads none
-unless you ask. The Certora tooling looks for compilers on PATH under the name `solcX.Y`,
-where `X.Y` is the minor and patch of the release, so `solc8.29` is 0.8.29 and `solc7.6` is
-0.7.6. One project routinely needs several at once, because autosetup emits a `compiler_map`
-pinning different contracts to different compilers.
-
-[solc-select](https://github.com/crytic/solc-select) is the usual way to get the binaries, but
-it puts a single switchable `solc` shim on PATH rather than the per version names, so it needs
-a bridge. `install.sh` sets up both and writes a `solc-bridge` command beside `certoraRun`:
+autosetup still reads the variable while importing its summary module, and exits 1 without it
+even for `--help`. The check is only that the value is non-empty; it never tries the key
+(`certora_autosetup/setup/setup_summaries.py:70-93`), and a `.env` file in the working
+directory is loaded instead, after which the variable is not checked at all. So a placeholder
+satisfies it, and the skill exports one itself:
 
 ```sh
-solc-bridge                      # relink whatever compilers are installed
-solc-bridge --solc "0.8.29"      # install named versions, then relink
-solc-bridge --project .          # work out what this project needs, install it, relink
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-skip-llm-placeholder}"
 ```
 
-SKILL.md Phase 0 tells the agent to run `solc-bridge` when a version the project needs is
-missing, so an agent working on a machine where it does not exist will report a missing
-command and stop. The command is a thin front end onto `install.sh --bridge-only`: it needs
-the checkout it was installed from to still be there, and it says so plainly if that checkout
-has moved or gone.
+What the default costs: summaries for library and external functions are static only, so the
+ones that are hard to summarize statically get none, and specs that lean on them are weaker.
+With a real key you can drop `--skip-llm` and get the LLM-written summaries, at the price of
+LLM calls billed to that key.
 
-Doing it by hand, for a machine where `install.sh` was never run:
+**solc.** Nothing in the install ships a Solidity compiler, and the installer installs none.
+Compilers are managed by [solc-select](https://github.com/crytic/solc-select), the same way the
+rest of the Solidity tooling does it:
 
 ```sh
-uv tool install solc-select
-env -u VIRTUAL_ENV solc-select install 0.8.34 0.8.30    # the versions your project needs
-
-out=$(uv tool dir --bin)      # where certora-autosetup and certoraRun already are
-usable=""
-for d in "$HOME"/.solc-select/artifacts/solc-*/; do
-  d=${d%/}; v=${d##*/solc-}; bin="$d/solc-$v"
-  [ -x "$bin" ] || continue
-  case "$v" in 0.*) name="solc${v#0.}" ;; *) name="solc$v" ;; esac
-  ln -sfn "$bin" "$out/$name"
-  ln -sfn "$bin" "$out/solc-$v"
-  usable="$usable $v"
-done
-[ -n "$usable" ] || { echo "nothing under $HOME/.solc-select/artifacts to bridge" >&2; exit 1; }
-highest=$(printf '%s\n' $usable | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
-ln -sfn "$HOME/.solc-select/artifacts/solc-$highest/solc-$highest" "$out/solc"
+uv tool install solc-select                          # or pipx, or pip
+env -u VIRTUAL_ENV solc-select install 0.8.27        # every version the project resolves to
 ```
 
-Each compiler gets both names the tooling understands, `solc8.34` and `solc-0.8.34`, and plain
-`solc` points at the highest installed version. The sort is numeric per component on purpose:
-sorted as text, `0.8.9` outranks `0.8.36` and plain `solc` ends up on the older compiler.
+Which version is not a question about your machine, so the skill answers it per project in
+Phase 3, from the project's resolved build plan rather than from its pragmas:
+`forge compiler resolve --json -vv` for Foundry, autosetup's own
+`hardhat_config_extractor.js` for Hardhat. Pragmas say what each file tolerates; the build plan
+says what the project actually compiles with. On one real project the resolved plan is a single
+0.8.27 while a repository-wide pragma reading adds a second version that must never reach a
+`compiler_map`.
+
+The skill then installs each of those versions and gives it the name autosetup writes into a
+conf. autosetup's only name for a per-contract compiler is the Certora form `solc8.27`
+(`enhanced_config_manager.py:745-761`, with the convention fixed at `autosetup.py:446`), and
+solc-select's store holds `solc-0.8.27`, so Phase 3 builds a directory of aliases, one per
+installed version, and puts it in front of PATH for the run. certoraRun takes those names as
+they are: `solc` and every `compiler_map` value may be a bare name on PATH, an absolute path or
+a cwd-relative path (`certoraValidateFuncs.py:409-420`, `:125-160`), and the version comes from
+running the binary (`CompilerCollectorFactory.py:142-169`), never from parsing its name.
+
+Nothing is selected globally, and a project needing several compilers at once is ordinary: the
+conf keeps the per-contract names, so it records which compiler compiled which contract.
 
 Three details worth knowing. `env -u VIRTUAL_ENV` matters because solc-select relocates its
-whole store into `$VIRTUAL_ENV/.solc-select` when that variable is set, and the bridge then
-finds an empty store. The bridge directory must not contain a space, because `certoraRun`
-builds the compiler command as a string and splits it on whitespace. And on Apple silicon,
-0.8.5 and later are native or universal binaries, while anything older is Intel only and needs
-Rosetta 2 (`softwareupdate --install-rosetta`).
+whole store into `$VIRTUAL_ENV/.solc-select` when that variable is set, and then the artifact
+directories above are empty. No path on PATH may contain a space, because `certoraRun` builds
+the compiler command as a string and splits it on whitespace. And on Apple silicon, 0.8.5 and
+later are native or universal binaries, while anything older is Intel only and needs Rosetta 2
+(`softwareupdate --install-rosetta`).
 
 Phase 0 of the skill checks all of the above and stops with a specific message if something is
 missing.
@@ -377,12 +342,10 @@ missing.
 ## Layout
 
 ```
-install.sh                    installs the toolchain and links the skill; holds the AutoProver pin
+install.sh                    installs the toolchain and links the skill
 README.md                     this file
 AGENTS.md                     entry point for agents with no skill mechanism
 LICENSE                       GNU General Public License v3
-scripts/
-  solc_versions.py            derives a project's solc versions with autosetup's own pragma parser
 .claude-plugin/
   plugin.json                 Claude Code plugin manifest
   marketplace.json            Claude Code marketplace holding that one plugin
@@ -396,7 +359,6 @@ skills/certora-verify/
     cvl-writing.md            docs map, writing guidelines, judge checklist
     cvl-pitfalls.md           traps that aren't on any single docs page
     prover-loop.md            building confs, running certoraRun, reading results
-    timeout-resolver.md       handing a timed-out rule to the hosted Timeout Resolver
   evals/evals.json            dev-time eval set for skill authoring
 ```
 
@@ -412,16 +374,39 @@ a long wall clock time. Eval 3 is offline and cheap.
 
 ## What has actually been tested
 
-The installer has been run end to end on macOS (Apple silicon, zsh), from an empty HOME with
-nothing but `/usr/bin:/bin` on PATH: uv, `ai-composer` at the pinned commit, `certora-cli`
-8.19.2 with `certoraRun` reachable on PATH, solc-select, the `solcX.Y` bridge, and the skill
-symlinked. A second run is a no-op. `--uninstall` removes the uv tools, the command symlinks,
-the compiler symlinks, the shim and the state file, and leaves the solc-select compiler store
-alone because other tools share it. No shell startup file is written. `--self-test` runs 35
-checks and `shellcheck` is clean apart from two intentional subshell notices.
+Measured on macOS (Apple silicon, zsh). The installer runs end to end from an empty HOME with
+nothing but `/usr/bin:/bin` on PATH, into scratch uv directories: `ai-composer` at the pinned
+commit, `certora-cli` 8.19.2 with `certoraRun` reachable from the bin dir it reports,
+`solc-select`, and the skill symlinked. A second run is a no-op. With stdin closed it prints
+the plan, exits non-zero and leaves HOME byte-identical. No shell startup file is written.
+`shellcheck` is clean.
+
+Also measured, because the design rests on it: `uv tool install --with-executables-from
+certora-cli` does expose certora-cli's nine commands even though certora-cli arrives through an
+extra, uv records all nine in its receipt, and `uv tool uninstall ai-composer` takes all thirty
+back. A standalone `certora-cli` tool collides, and uv says so plainly rather than silently
+taking the name.
+
+On compilers, measured by running autosetup against a Foundry project that pins
+`solc_version = "0.8.21"`, on a PATH holding only a solc-select-selected `solc` and no
+Certora-form binary. `forge compiler resolve --json` returned `{0.8.21}`, the pin. autosetup
+then wrote `solc8.21` into the conf from the build configuration, found no such binary, applied
+its `solc_not_found_fallback`, and the conf it drove came out as `"solc": "solc"`. It compiled
+and submitted four cloud jobs.
+
+Two things that run showed, which the recipe alone does not. The conf's compiler comes from the
+build configuration (`build_systems/base.py:113-117`), so the name in the conf is the version
+the project pins, whatever `--solc-default` says. And the missing-compiler fallback rewrites
+only the conf autosetup drives, while the sibling confs it also writes (`invariants.conf` and
+the per-property confs) keep the declared `solc8.21`, so those still want that binary by name.
+
+Read from AutoProver's source rather than measured: that certoraRun accepts absolute compiler
+paths, and that a project declaring no version at all loses the fallback entirely.
 
 What has not been tested: no agent has loaded this skill yet, in any harness, and no
-verification run has been driven through this installer from Phase 0 to a report. The
+verification run has been driven through this installer from Phase 0 to a report. The Hardhat
+extractor path has not been exercised from this skill against a real Hardhat project, and
+neither has a genuinely multi-compiler project nor the alias directory Phase 3 builds. The
 per-agent skill directories come from vendor documentation and the skills CLI's own table
 rather than from a run in each agent, so treat the table in
 [Which agents it runs in](#which-agents-it-runs-in) as the claim it is.

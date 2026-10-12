@@ -14,13 +14,12 @@ contract X with the prover", "write a Certora spec for X and run it".
 ## What to read
 
 `skills/certora-verify/SKILL.md` is the flow of record: phases 0-7. Read it in full before
-acting. It names five references, each read when its phase needs it:
+acting. It names four references, each read when its phase needs it:
 
 - `skills/certora-verify/references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
 - `skills/certora-verify/references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
 - `skills/certora-verify/references/cvl-pitfalls.md`, prover traps that are on no single docs page
 - `skills/certora-verify/references/prover-loop.md`, building confs, running `certoraRun`, reading results
-- `skills/certora-verify/references/timeout-resolver.md`, handing a timed-out rule to the hosted Timeout Resolver and applying what it returns
 
 `skills/certora-verify/evals/evals.json` is a dev-time eval set for working on the skill, not
 part of running it. Two of its three evals submit real cloud prover jobs and cost money.
@@ -40,26 +39,25 @@ part of running it. Two of its three evals submit real cloud prover jobs and cos
 
 ## Environment
 
-Phase 0 checks `certoraRun`, `certora-autosetup`, `CERTORAKEY`, `ANTHROPIC_API_KEY`, Java 19 or
-newer, and the `solcX.Y` binaries the target project's pragmas need, and stops with a specific
-message if one is missing. `README.md` has every install command, and `./install.sh` runs them
-for you.
+Phase 0 checks the machine: `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java 19 or
+newer, and a compiler manager. It stops with a specific message if one is missing.
+`./install.sh` installs the toolchain and places the skill; it installs no compiler.
 
 Two things to know before you stop over them:
 
-- `ANTHROPIC_API_KEY` has to be set for `certora-autosetup` to start at all, including
-  `--help`, and only its non-emptiness is checked, never the value itself. A user with no
-  Anthropic key can export a placeholder and pass `--skip-llm`, which turns off every LLM call
-  autosetup makes. Summaries are then static-only, which weakens every spec built on them, so
-  it is a fallback you choose deliberately and say out loud, never the default.
-- `CERTORA_API_KEY` is the organization API key of the Certora Runs API, and it is not
-  `CERTORAKEY`. Phase 6 uses it only for the hosted Timeout Resolver, so a run with no
-  timeout never asks for it. `references/timeout-resolver.md` lists the four permissions
-  the key needs.
-- The installer downloads no compilers by default. Compilers arrive through
-  `./install.sh --solc "<versions>"`, `./install.sh --project <path>`, or the `solc-bridge`
-  command the installer writes. `solc-bridge` exists only on a machine where `install.sh` ran;
-  without it, `README.md` has the equivalent solc-select commands.
+- No Anthropic key is needed. The flow runs `certora-autosetup --skip-llm`, which turns off
+  every LLM call autosetup makes. The variable is still read at import and only its
+  non-emptiness is checked, never the value, so export a placeholder and move on. Summaries
+  are then static only, which weakens the specs built on them; a user with a real key can drop
+  `--skip-llm` and pay for the better summaries.
+- Compilers are a per-project question, answered in Phase 3 rather than at install time. Read
+  the project's resolved build plan (`forge compiler resolve --json -vv` for Foundry,
+  autosetup's own extractor for Hardhat) rather than its pragmas, install what it resolves to
+  with `solc-select install`, and reach each version through a directory of aliases named the
+  way autosetup names a compiler in a conf, put in front of PATH for the run alone. Nothing is
+  selected globally. Foundry's per-file assignments reach the conf. For a build system whose
+  per-file assignments autosetup drops, Hardhat among them, Phase 3 stops before autosetup when
+  the plan gives different compilers to different files, and says which files disagree.
 
 ## House rules for this flow
 

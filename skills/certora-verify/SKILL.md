@@ -4,12 +4,11 @@ description: End-to-end formal verification of a Solidity contract with the Cert
 license: GPL-3.0-only
 compatibility: >-
   Requires certoraRun (certora-cli) and certora-autosetup on PATH, a CERTORAKEY for the
-  Certora cloud prover, an ANTHROPIC_API_KEY variable for autosetup, which checks only that
-  it is non-empty (a real key is what buys LLM-derived summaries), Java 19+,
-  network access to prover.certora.com and docs.certora.com, and the solc compilers the
-  target project's pragmas require, on PATH under the solcX.Y naming convention. For the
-  hosted Timeout Resolver that Phase 6 can fall back on, also a CERTORA_API_KEY and network
-  access to app.certora.com.
+  Certora cloud prover, Java 19+, network access to prover.certora.com and
+  docs.certora.com, and the Solidity compilers the target project pins, which Phase 3
+  installs with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
+  needed: autosetup
+  runs with --skip-llm, and the variable it checks at import takes a placeholder.
 metadata:
   version: "0.1.0"
   author: certora
@@ -49,13 +48,14 @@ Every phase writes its result under the project's `certora/` directory, so an in
 |---|---|
 | `certora/analysis/application.json` | Phase 2 (component model) |
 | `certora/analysis/closure.json` | Phase 3 (scene decision) |
+| `certora/analysis/compilers.json` | Phase 3 (compiler selection) |
 | `certora/confs/<Main>.conf`, `certora/specs/summaries/…`, `certora/specs/sanity-<Main>.spec` | Phase 3 (autosetup) |
 | `certora/properties/<slug>.properties.json` | Phase 4 |
 | `certora/specs/invariants.spec` + `certora/confs/invariants.conf` | Phase 5 |
 | `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md`, `certora/properties/<slug>.judge-round<N>.md` | Phase 6 |
 | `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
 
-Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
+Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
 Long-running commands (autosetup, and every full certoraRun) take tens of minutes to ~2h, longer than a single foreground command should hold your session. **Start them detached and poll their log.** The portable formulation needs nothing but a shell:
 
@@ -70,77 +70,35 @@ Read progress with `tail -n 20 certora/logs/<name>.log`, and check liveness with
 
 This skill is standalone: it needs nothing beyond the tools below. Fail fast with a specific message rather than improvising around a broken environment:
 
-- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both, though only one of them lands on PATH: the `certora-cli` extra installs `certoraRun` into the same tool environment, and `uv tool install` links the console scripts of the package you named, not those of its dependencies.
+- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
+
+  The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF`, the file beside this one; read it and substitute it for `<ref>`:
 
   ```bash
   GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
   GIT_CONFIG_VALUE_0='git@github.com:' \
-  uv tool install --python 3.12 \
-    'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@e6f9e2e4706225adb07178c1866ad61b4d827424'
+  uv tool install --python 3.12 --with-executables-from certora-cli \
+    'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@<ref>'
   ```
 
-  The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key. The ref is pinned because this skill describes autosetup flags and behaviour that move with it; this repo's `install.sh` carries the same pin and takes `--autoprover-ref` to override it.
+  The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key.
 
-  Then re-run `which certoraRun certora-autosetup`. If `certoraRun` is missing, link it out of the environment the extra installed it into:
+  Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
+- `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make (`setup_prover.py:1526` sets `enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it).
+
+  autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key (`certora_autosetup/setup/setup_summaries.py:70-93`); a `.env` in the working directory is loaded instead and then nothing is checked at all. So export a placeholder for the import and move on:
 
   ```bash
-  tooldir=$(uv tool dir)/ai-composer
-  for c in "$tooldir"/bin/certora*; do ln -sfn "$c" "$(uv tool dir --bin)/$(basename "$c")"; done
+  export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-skip-llm-placeholder}"
   ```
 
-  If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
-- `CERTORAKEY` set (cloud prover), and `ANTHROPIC_API_KEY` set to *something* (`[ -n "${ANTHROPIC_API_KEY:-}" ]`). autosetup checks that variable while importing its summary module, and it checks only that the value is non-empty, never that it is a working key (`certora_autosetup/setup/setup_summaries.py:70-93`); a `.env` in the working directory is loaded instead and then nothing is checked at all. So a user who has no Anthropic key is not blocked: export any non-empty placeholder and pass `--skip-llm`, which switches off every LLM call autosetup would make (`setup_prover.py:1526` sets `enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it).
-
-  That is a fallback you choose deliberately and say out loud, never the default: with `--skip-llm` the generated summaries are static-only, so the hard-to-verify library functions that most need an LLM-written summary get none, and every spec downstream inherits the weaker setup. Whenever the user has a real key, use it.
+  What the default costs: summaries for library and external functions are static only, so the ones that are hard to summarize statically get none, and specs that lean on them are weaker. If the user has a real Anthropic key and wants those summaries, drop `--skip-llm` and say that the run will make LLM calls they pay for. Ask first; never spend their key by default.
 - Java 19+ on PATH (`java -version`). autosetup shells out to the `ASTExtraction.jar` typechecker while resolving summaries and there is no fallback path, so an old or absent JDK fails mid-run rather than at startup.
-- The solc compilers the project needs are on PATH under the `solcX.Y` naming convention, where `X.Y` is the minor and patch of the release: `solc8.29` is 0.8.29, `solc7.6` is 0.7.6 (a `pragma solidity ^0.8.29` project needs `solc8.29`). A project routinely needs several at once, because autosetup emits a `compiler_map` pinning contracts to different compilers, so one selected-by-default `solc` is not enough.
+- A compiler manager, and a way to read a project's build plan. `solc-select` on PATH (`uv tool install solc-select` when it is not), plus `forge` when the target project has a `foundry.toml`, or `node` when it has a `hardhat.config.*`. No version is named here: which compilers a project needs is a property of that project, so Phase 3 derives it from the project's own build configuration and installs what it resolves to.
 
-  Start from what this project asks for: its `pragma solidity` statements plus any `solc` / `solc_version` / `solc-version` key in `foundry.toml` or the hardhat config, each resolved to the concrete release it admits. A version that isn't there yet is something to provision, not a reason to stop. This skill's `install.sh` sets up solc-select and the bridge but downloads no compiler by default: versions arrive only when someone asks for them, through `./install.sh --solc "0.8.29 0.7.6"` or `./install.sh --project <path>`, or mid-run through the `solc-bridge` command that installer leaves next to `certoraRun`:
+  Two machine facts that belong here rather than in Phase 3. solc-select moves its whole store into an active virtualenv, so every `solc-select` command in this flow runs under `env -u VIRTUAL_ENV`. And no directory holding a compiler may contain a space: certoraRun builds the compiler command as one string and splits it on whitespace.
 
-  ```bash
-  solc-bridge --project .              # resolve this project's pragmas, install what is missing, relink
-  solc-bridge --solc "0.8.29 0.7.6"    # install these versions, then relink
-  ```
-
-  `solc-bridge` comes from that installer, so it is there only on a machine the installer ran on. If `command -v solc-bridge` finds nothing, either stop and ask the user to run this skill's `install.sh`, or do the same two things by hand: download with solc-select, then link every artifact under both names the Certora tooling understands.
-
-  ```bash
-  uv tool install solc-select        # only if solc-select is not on PATH yet
-
-  # solc-select redirects its whole store into an active virtualenv, where the loop below never
-  # looks, so run it with VIRTUAL_ENV out of the way.
-  env -u VIRTUAL_ENV solc-select install 0.8.29 0.7.6
-
-  # The compilers go in the directory certoraRun is already in, so a machine that can run the
-  # prover can reach them without a second PATH entry. The bullet above already proved it is on PATH.
-  out=$(dirname "$(command -v certoraRun)")
-  have=""
-  for d in "$HOME"/.solc-select/artifacts/solc-*/; do
-    d="${d%/}"; v="${d##*/solc-}"; bin="$d/solc-$v"
-    [ -x "$bin" ] || continue          # a half-downloaded artifact leaves a directory with no binary
-    case "$v" in 0.*) name="solc${v#0.}" ;; *) name="solc$v" ;; esac
-    ln -sfn "$bin" "$out/$name"
-    ln -sfn "$bin" "$out/solc-$v"
-    have="$have $v"
-  done
-  # A plain `solc` is autosetup's last-resort candidate when a pinned binary is missing. Point it at
-  # the highest version present, sorted numerically per component: lexically, 0.8.9 beats 0.8.30.
-  hi=$(printf '%s' "$have" | tr ' ' '\n' | sed '/^$/d' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
-  [ -n "$hi" ] && ln -sfn "$HOME/.solc-select/artifacts/solc-$hi/solc-$hi" "$out/solc"
-  ```
-
-  Either route puts the compilers beside `certoraRun`. Check the versions you derived above by name, which is this bullet's pass/fail gate:
-
-  ```bash
-  missing=""
-  for n in solc8.29 solc7.6; do command -v "$n" >/dev/null 2>&1 || missing="$missing $n"; done
-  [ -z "$missing" ] && echo "all compilers present" || echo "missing:$missing"
-  ```
-
-  A non-empty `missing` after a bridging attempt is the fail-fast case: name the absent `solcX.Y` binaries and stop, rather than starting a run that dies in compilation.
-
-  Never assume a fixed version, and never point the conf's `solc` or `compiler_map` at an absolute path: autosetup reads the compiler's version out of the *name*, so an absolute path leaves it unable to check pragmas, plan a fallback, or generate library harnesses. On Apple silicon 0.8.5 and up are native or universal binaries; below 0.8.5 they are Intel-only and need Rosetta 2, which is the user's call and not yours: stop and ask them to run `softwareupdate --install-rosetta`, which prompts for a license and for admin rights.
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
 - Optional: a Certora API key in `CERTORA_API_KEY` (`references/timeout-resolver.md`). Phase 6 uses it only when a rule times out and the manual fixes are exhausted. Its absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user for a key then.
 
@@ -169,17 +127,80 @@ First decide the **scene** (which contracts the prover must model):
 - Classify each closure contract: a bog-standard ERC20 → note as ERC20 (the setup models tokens with dummy mocks); a meaningful ERC20 *extension* → keep as a real contract.
 - The prover instantiates exactly **one** instance per contract declaration. If meaningful verification requires ≥2 instances of one contract, write minimal harnesses `contract XInstance1 is X {}` under `certora/harnesses/` and add them to the scene. Usually not needed — skip unless the protocol's core state genuinely spans multiple instances.
 
-Record the closure in `certora/analysis/closure.json`. Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **detached** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
+Record the closure in `certora/analysis/closure.json`.
+
+### Compiler selection
+
+Which compilers this project needs is a property of the project, so derive it here rather than in preflight: a `git pull` in the target repo can change the answer.
+
+Read the **resolved build plan**, not the pragmas. Pragmas say what each file tolerates; the build plan says what the project actually compiles with, which is what autosetup has to agree with. For Foundry, from the project as the working directory (`--root` on its own returns `{}`):
+
+```bash
+cd <project_root>
+forge compiler resolve --json -vv 2>certora/logs/forge-resolve.err
+```
+
+`.Solidity[].version` is one entry per compilation unit, so deduplicate it; `.Solidity[].paths` is the file list each version covers. `No such file or directory` lines under `lib/` in the error log mean the project's dependencies are not checked out and the answer came from a partial source graph: run the project's own dependency step (`forge install`, or `git submodule update --init --recursive`) and read it again, because autosetup needs those sources too.
+
+For Hardhat, run autosetup's own extractor rather than parsing the config, which is code and can read the environment:
+
+```bash
+extractor=$("$(uv tool dir)"/ai-composer/bin/python -c \
+  'import certora_autosetup, pathlib; print(pathlib.Path(certora_autosetup.__file__).parent / "build_systems/hardhat_config_extractor.js")')
+cd <project_root> && node "$extractor"
+```
+
+Take `.solidity.compilers[].version` plus every `.solidity.overrides[*].version`, since an override is a per-file compiler. `.solidityImplicitDefault: true` means the project declares nothing and the version shown is Hardhat's own built-in default, which says nothing about these sources: treat it as no answer. `{}` means the config would not load, so run the project's install step first.
+
+With neither available, read the `pragma solidity` line of each file **in the closure** and take the newest release all of them admit. Say in the log that this is a pragma reading rather than a resolved plan: it over-reports. On one real project the resolved plan is a single 0.8.27 while a repository-wide pragma reading adds a second version that must never reach a `compiler_map`.
+
+Then intersect with the closure. A version whose files are all tests, scripts or library code outside the closure is not your problem.
+
+Install every version the closure resolves to:
+
+```bash
+env -u VIRTUAL_ENV solc-select install 0.8.17 0.8.21
+```
+
+Then give each one the name autosetup writes. Its only name for a per-contract compiler is the Certora form `solc8.17` (`enhanced_config_manager.py:745-761`, the convention fixed at `autosetup.py:446`), while solc-select's store holds `solc-0.8.17`. A directory of aliases bridges the two:
+
+```bash
+bin=<project_root>/certora/solc-bin                     # a path with no space in it
+mkdir -p "$bin"
+ln -sf "$HOME/.solc-select/artifacts/solc-0.8.17/solc-0.8.17" "$bin/solc8.17"
+export PATH="$bin:$PATH"
+solc8.17 --version                                      # must report 0.8.17
+```
+
+One alias per installed version, named by dropping the leading `0.`: `0.8.17` becomes `solc8.17`, `0.7.6` becomes `solc7.6`. The path must hold no space, because certoraRun builds the compiler command as one string and splits it on whitespace; if the project path holds one, build the directory under `$HOME` instead, and if that holds one too, stop and say so. Export the PATH in the shell that runs autosetup and every later certoraRun. Nothing outside the run changes, and no compiler is selected globally.
+
+Leave `--solc-default` off the autosetup command below, so autosetup writes the per-contract names the build plan resolved to and the aliases answer to them. The conf then says which compiler compiled which contract. The flag only supplies a name for contracts nothing else pins (`compilation_workarounds.py:337-349`); the bare `solc` makes every entry read `solc`, and the conf follows whatever the machine selected last.
+
+**Several versions over the closure** is not a problem to avoid: install them all and let `compiler_map` carry them. Never put a newer compiler in place of a version the plan pinned, however wide the pragmas are, because the run would then answer for a build nobody ships. Two cases stop the run before it submits a job, and autosetup names both: a version that cannot be provisioned at all (`UnsatisfiableSolcPinError`, with the contract and its pragma), and one compilation unit whose files no single compiler satisfies (`ConflictingPragmaError`).
+
+**Only Foundry carries a per-file assignment into the run.** Autosetup reads Foundry's build artifacts for the compiler each contract was built with and writes them into `compiler_map` (`setup_prover.py:199-214`), then applies Foundry's `compilation_restrictions` on top (`foundry.py:104`). For any other build system both steps are skipped: the precompute returns the conf untouched (`setup_prover.py:213-214`) and the per-contract hook is a no-op (`base.py:74-88`). Hardhat's per-file compiler, the `solidity.overrides` block, is read by nobody: the extractor hands it over and the version extraction takes `solidity.compilers[]` alone (`hardhat.py:291-306`). One entry in `compilers` plus an override on one file therefore reaches autosetup as a single-version project, every entry in the seeded map gets the same value, the map collapses back to a scalar `solc` (`compilation_workarounds.py:366-374`), and both files compile at the version the override exists to avoid.
+
+So before you run the autosetup command below, work out the compiler autosetup will really use for each file you hand it. Require that compiler to equal the one the plan gives that file. The rule holds whatever the closure needs, and Foundry meets it by construction. For every other build system the effective compiler is one value for the whole run. It is the single version in `solidity.compilers[]` when that list holds one (`hardhat.py:291-306`), and otherwise the default name plus a pragma reading per contract. An override that moves one file off that value disagrees. That holds when the closure needs a single compiler, and when the closure holds only that one file. On any disagreement, **stop and tell the user**: name each file, the compiler the plan gives it, and the compiler the run would use. No flag repairs this. `--extra-args` reaches only the certoraRun command line (`cli.py:150`, `autosetup.py:737`), the command line shadows the conf one key at a time (`certoraConfigIO.py:67-70`), and a compiler map standing next to the conf's own `solc` is refused outright (`certoraContextValidator.py:425-431`). A conf edited afterwards is too late as well, because autosetup submits real prover jobs while it works: by the time there is a conf to fix, the jobs that resolved the calls and tuned the bounds have already run at the wrong compiler. Two ways forward are honest. Verify a part of the system whose files all take the compiler the run would use anyway. That is not the same as a part that needs one compiler. Or get the per-file assignment carried into the run first.
+
+When autosetup finishes, read the compiler names out of the conf it drove and out of the siblings beside it (`invariants.conf`, the per-property confs), and check each name twice: against the alias directory, and against the compiler the resolved plan gives that contract's file.
+
+A missing alias is the one unambiguous repair, because the name in the conf is already the plan's answer. A later `certoraRun` reporting `Solidity executable solc8.X not found in path` means that alias is absent: add it rather than retarget the conf at another compiler.
+
+A name that disagrees with the plan is a stop, not a repair: report which contracts disagree, what the plan gives them, and what the conf says. Autosetup's own default name, `solc8.34` (`constants.py:53`), is the one to read carefully, because it has two meanings and the plan separates them. Look up the contract's file in the plan's file lists (`.Solidity[].paths` for Foundry, the `compilers` entries and `overrides` keys for Hardhat). A file the plan does not cover was never assigned a compiler, so the default is the right answer: install that version and alias it too. A file the plan does cover reached the conf with its assignment lost, and an alias would hide that, so stop and report it.
+
+Record what you found in `certora/analysis/compilers.json`: `source` (resolved plan or pragma reading), `versions`, `closure_versions`, `alias_dir`, and `aliases` as alias name to the version its binary reports. On resume, run `<alias> --version` for every entry and rebuild any alias that is missing or answers with a different version, instead of trusting the record.
+
+Then build the prover setup with **certora-autosetup** (a tool that automates the fiddly part: compiler settings, contract linking, loop bounds, and generated summaries for hard-to-verify library functions). Full invocation, outputs, and failure modes: **`references/autosetup.md`**. In short, run this **detached** (it launches real prover jobs to resolve calls and tune bounds — tens of minutes is normal), from the project root:
 
 ```bash
 cd <project_root>
 nohup certora-autosetup --main-contract <rel_path>:<Main> \
-  <rel_path>:<Main> <closure .sol files...> --no-strip-contracts \
+  <rel_path>:<Main> <closure .sol files...> --no-strip-contracts --skip-llm \
   > certora/logs/autosetup.log 2>&1 &
 echo $! > certora/logs/autosetup.pid
 ```
 
-Poll it with `tail -n 20 certora/logs/autosetup.log`, reporting the elapsed time and the last line each time, until the process exits (`kill -0 $(cat certora/logs/autosetup.pid)` fails). If Phase 0 put you on the no-key fallback, add `--skip-llm` to that command and carry the static-only summaries into the report's confidence notes in Phase 7. Below, `<Main>` is the main contract's name. Its deliverables are the foundation for everything after:
+Poll it with `tail -n 20 certora/logs/autosetup.log`, reporting the elapsed time and the last line each time, until the process exits (`kill -0 $(cat certora/logs/autosetup.pid)` fails). `--skip-llm` is the default here, so the summaries are static-only: carry that into the report's confidence notes in Phase 7. Drop the flag only when the user has an Anthropic key and has agreed to the LLM calls it bills for. Below, `<Main>` is the main contract's name. Its deliverables are the foundation for everything after:
 
 - `certora/confs/<Main>.conf` — a working prover conf (files, compiler settings, `loop_iter`, hashing bounds). Note: contract *links* are NOT in the conf — they live as a CVL `links` block inside the call-resolution spec below.
 - `certora/specs/summaries/<Main>_base_summaries.spec` AND `certora/specs/summaries/<Main>_call_resolution.spec` — generated summaries plus the links/DISPATCHER resolution. Every spec you write MUST import BOTH (copy the import lines verbatim from the top of `sanity-<Main>.spec`, which also cover `erc7201.spec` when present). Importing only the base summaries silently drops every link, and calls that sanity resolved will havoc in your rules.
@@ -252,7 +273,6 @@ Consult the docs pages while authoring — particularly Methods Block/summaries,
 - Build the `property_rules` mapping (every non-skipped property title → the rule/invariant name(s) that verify it) and persist it to `certora/properties/<slug>.property_rules.json` — it gates completion and feeds the report, so it must survive a restart.
 - Typecheck first: `certoraRun <conf> --compilation_steps_only` (fast ~1 min); fix all type/parse errors before anything else (the judge assumes the spec typechecks).
 - Then prove: build the conf as the setup base plus the overlay defined in `references/prover-loop.md` (single source of truth for the overlay; it includes `wait_for_results: "all"`, load-bearing because the base conf ships `wait_for_results: none`). Run certoraRun (mechanics, status parsing, counterexample extraction all in that reference). For each non-verified rule, analyze the trace, classify the root cause, and apply the remediation playbook there: missing-invariant `requireInvariant`, sound summaries for havocs (never `NONDET` on side-effecting functions, never `persistent` ghosts to dodge a havoc), `filtered` blocks at ~95% certainty, expected-failure for a rule that exposes a genuine bug OR that fails only due to an exhausted prover limitation (record which), skip for genuinely-invalid properties, contradictory-`require` hunt for sanity failures.
-- A rule that still ends TIMEOUT after the playbook's scope reductions can go to the hosted Timeout Resolver: one call per rule with the run link and the property, as `references/timeout-resolver.md` describes. Apply its patches, keep its Lean file, and re-run the full unfiltered run yourself. A resolver result other than `resolved` leaves the rule a TIMEOUT: read its informal proof for the missing lemma, then continue by hand.
 - Iterate write→prove yourself until the full unfiltered run is clean (all VERIFIED or expected-to-fail) or you've exhausted principled fixes. Write the per-component commentary (`certora/properties/<slug>.commentary.md`). **Hand over** the final spec, `property_rules`, the full prover status (including expected-fail markings + reasons), and any structural-invariant requests, then stop generating and let the judging pass take over; generation never reviews its own work in the same pass.
 
 ### Judge inputs (the judge role)
@@ -275,6 +295,5 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
 - Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only).
-- Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.
