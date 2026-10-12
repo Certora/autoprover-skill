@@ -39,13 +39,13 @@ A refused call answers with `application/problem+json`. The body holds `status`,
 
 ## Starting a run
 
-Start one run per rule. The create call needs an `Idempotency-Key` header of 1 to 200 characters. Use one key per rule, for example `<slug>-<ruleName>-1`, and send the same string as `client_reference` in the body. A retry with the same key and the same body returns the same run and starts nothing. A new key starts a new run, and a new run is a new charge.
+Start one run per rule. The create call needs an `Idempotency-Key` header of 1 to 200 characters, and the same string goes in the body as `client_reference`. Build the key out of the input it launches: `<slug>-<ruleName>-<job>`, where `<job>` is the job segment of the run link. The record behind a key never expires once it holds a run or a balance hold, so a key reused against a later prover run arrives with a different body and earns `409 idempotency_conflict` in place of a run. Write each key to `certora/resolver/keys.json`, under its component and rule, when you first send it, and read it back only to retry or resume that same attempt. A retry with the same key and the same body returns the same run and starts nothing. A fresh key starts a new run, and a new run is a new charge.
 
 ```bash
 curl -sS -X POST "$CERTORA_API_BASE_URL/v2/timeout-resolver-runs" \
   -H "Authorization: Bearer $CERTORA_API_KEY" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: <slug>-<ruleName>-1" \
+  -H "Idempotency-Key: <slug>-<ruleName>-<job>" \
   -d '{
     "run_url": "https://prover.certora.com/output/<user>/<job>/",
     "rule": "<ruleName>",
@@ -56,7 +56,7 @@ curl -sS -X POST "$CERTORA_API_BASE_URL/v2/timeout-resolver-runs" \
     },
     "goal": "resolve_timeout",
     "app_description": "<two or three sentences on the protocol, from certora/analysis/application.json>",
-    "client_reference": "<slug>-<ruleName>-1"
+    "client_reference": "<slug>-<ruleName>-<job>"
   }'
 ```
 
@@ -68,14 +68,16 @@ Optional fields:
 
 The reply is `202` with a `run` object. Keep `run.id`. Record it in the commentary file of the component.
 
-A `503 launch_outcome_unknown` is the one refusal that leaves the outcome open: the run has possibly started. Do not send the same idempotency key again, because that replays the same refusal. Do not mint a new one either, because that starts a second paid run. Look for the run instead:
+A `503 launch_outcome_unknown` is the one refusal that leaves the outcome open: the run has possibly started. Retry the create call with the original key and the unchanged body, a few seconds apart. The service looks for a recovered run before it replays anything, so the original key is what surfaces a run that did start. Never mint a second key for the same attempt, because that starts a second paid run. A `202` naming a run settles it, whether that is the replayed success or a run the service recovered: poll that run. Another `launch_outcome_unknown`, or a `503 launch_recovery_pending`, means the outcome is still open. Retry the same key about five times over a few minutes, then stop and hand the user the key and the run link. Launch nothing else.
+
+The run list tells you whether a run exists:
 
 ```bash
-curl -sS "$CERTORA_API_BASE_URL/v2/runs?run_type=timeout_resolver&client_reference=<slug>-<ruleName>-1" \
+curl -sS "$CERTORA_API_BASE_URL/v2/runs?run_type=timeout_resolver&client_reference=<slug>-<ruleName>-<job>" \
   -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
-If the list holds a run, poll that one. If the list is empty, create again with a new idempotency key.
+A run in the list is the one to poll. An empty list proves nothing: `client_reference` is written only after a launch returns a run id, so an ambiguous launch leaves it unset while the run exists. An empty list is never permission to create.
 
 ## Waiting
 
