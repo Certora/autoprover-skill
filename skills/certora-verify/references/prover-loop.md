@@ -24,16 +24,19 @@ Never hand-roll a conf — start from the autosetup base (`certora/confs/<Main>.
 
 ## Running
 
-A full run takes minutes to ~2h (`"global_timeout": 7200` caps it), longer than a foreground tool call may live — run it in the background, redirect to a log, and poll:
+A full run takes minutes to ~2h (`"global_timeout": 7200` caps it), longer than a single foreground command should hold your session — start it detached, redirect to a log, and poll the log:
 
 ```bash
 cd <project_root>
-certoraRun certora/confs/<slug>.conf > certora/logs/<slug>_run<N>.log 2>&1   # background this
+nohup certoraRun certora/confs/<slug>.conf > certora/logs/<slug>_run<N>.log 2>&1 &
+echo $! > certora/logs/<slug>_run<N>.pid
+# progress:  tail -n 20 certora/logs/<slug>_run<N>.log
+# liveness:  kill -0 $(cat certora/logs/<slug>_run<N>.pid)
 ```
 
 With `wait_for_results: all` the command submits to the cloud, streams the prover log while waiting, prints the report link (`https://prover.certora.com/output/<user>/<job>?anonymousKey=<key>`), and on completion prints a listing of *failing* rules only (or a bare success message when everything verified). Do not try to parse per-rule verdicts out of stdout — get them from the web report or the treeView JSON (method 2 below).
 
-**Typecheck-only gate:** `certoraRun <conf> --compilation_steps_only` is a fast (~1 min) syntax/type check — run it after every spec edit before paying for a full run (it's cheap enough to run in the foreground).
+**Typecheck-only gate:** `certoraRun <conf> --compilation_steps_only` is a fast (~1 min) syntax/type check — run it after every spec edit before paying for a full run (short enough to wait on directly instead of detaching).
 
 ## Reading results
 
@@ -79,11 +82,11 @@ Anything else: consult the docs and make *principled* changes — never brute-fo
 
 ## The generator's inner loop
 
-This is the write↔prove loop a generator runs on its own component (the *judge* is a separate batch the orchestrator spawns between generation rounds — see SKILL.md Phase 6; a generator never runs the judge itself):
+This is the write↔prove loop the generator role runs on its own component (judging is a separate step that happens after generation — see SKILL.md Phase 6; the generator never judges its own spec in the same pass, and in sequential mode judging is a deliberate fresh-context re-read of the files on disk):
 
 1. Edit spec → typecheck-only run → full (or rule-filtered) run.
 2. Analyze every non-verified rule per the table; apply the fix; re-run. Iterate prover-only through tight counterexample-fix cycles.
-3. Stop and return when a full **unfiltered** run has every rule VERIFIED or expected-to-fail (or you've exhausted principled fixes). Return the spec, `property_rules`, and the full prover status; the orchestrator's judge batch reviews it, and if it rejects, you get the feedback on your next round.
+3. Stop when a full **unfiltered** run has every rule VERIFIED or expected-to-fail (or you've exhausted principled fixes). Hand over the spec, `property_rules`, and the full prover status; the judging step reviews it, and if it rejects, its written feedback is the input to the next generation round.
 
 Keep a per-component commentary file (`certora/properties/<slug>.commentary.md`): decisions, summaries introduced and their soundness story, trust assumptions, expected failures with the CEX scenario and whether each is a genuine issue or a prover limitation. This becomes the raw material for the report.
 

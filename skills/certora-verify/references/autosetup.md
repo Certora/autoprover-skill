@@ -4,23 +4,27 @@ AutoSetup turns "a Foundry/Hardhat project + a main contract" into "a prover set
 
 ## Availability
 
-`certora-autosetup` (alias `autosetup`) must be installed and on PATH — it is NOT part of `pip install certora-cli` and has no standalone pip package; obtain it from Certora. It shells out to `certoraRun`, so certora-cli must be on the same PATH.
+`certora-autosetup` (alias `autosetup`) must be installed and on PATH. It is NOT part of `pip install certora-cli`: it is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. The install command, with the pin it needs, lives in **SKILL.md Phase 0** and only there, so there is one copy of it to keep right.
 
-Requires `ANTHROPIC_API_KEY` in the environment (or a `.env` in the project dir) — the check fires at startup regardless of flags, so even `--skip-llm` runs need it. `CERTORAKEY` is needed for the cloud prover jobs it submits.
+Two things about that install are worth knowing here. autosetup shells out to `certoraRun`, so certora-cli has to be on the same PATH, which is what `--with-executables-from certora-cli` arranges: `uv tool install` links the console scripts of the package it was given, not those of its dependencies. And exactly one of the `certora-cli`, `certora-cli-beta` and `certora-cli-beta-mirror` extras may be chosen: they are declared mutually exclusive and all ship the same `certora_cli` module.
+
+Requires `ANTHROPIC_API_KEY` in the environment (or a `.env` in the working directory), and the check fires at import time regardless of flags, so even `--skip-llm` runs need the variable set. What it tests is that the value is non-empty, never that it authenticates (`certora_autosetup/setup/setup_summaries.py:70-93`); with a `.env` present the file is loaded and the value is not tested at all. `CERTORAKEY` is needed for the cloud prover jobs it submits.
 
 ## Invocation
 
 From the target project root:
 
 ```bash
-certora-autosetup \
+nohup certora-autosetup \
   --main-contract src/Vault.sol:Vault \
   src/Vault.sol:Vault src/Escrow.sol:Escrow ... --no-strip-contracts \
-  2>&1 | tee certora/logs/autosetup.log
+  > certora/logs/autosetup.log 2>&1 &
+echo $! > certora/logs/autosetup.pid
+# follow with: tail -n 20 certora/logs/autosetup.log
 ```
 
 - Positional args: the scene — the main contract plus the transitive-closure contracts from your scene analysis (`--no-strip-contracts` keeps them all). With NO positional files it auto-detects *every* contract in the project — usually too much; pass the closure explicitly.
-- Useful flags: `--use-local-runner` (local prover instead of cloud), `--skip-llm` (static-only summaries — skips the LLM calls but does NOT lift the ANTHROPIC_API_KEY/.env requirement), `--skip-warmup` (skip the cache-priming job; saves time), `--build-system {auto,foundry,hardhat}`, `--solc-default solcX.Y`, `--dummy-erc20 N`, `--extra-args "<quoted certoraRun args>"`, `--clear-cache`.
+- Useful flags: `--use-local-runner` (local prover instead of cloud), `--skip-llm` (the default in this flow: it turns off every LLM call, and the `ANTHROPIC_API_KEY`/`.env` variable must still be set to something non-empty, though nothing reads the value, so a placeholder does), `--skip-warmup` (skip the cache-priming job; saves time), `--build-system {auto,foundry,hardhat}`, `--solc-default <name>` (the compiler name for contracts nothing else pins, `solc8.34` by default; this flow does not pass it, see SKILL.md Phase 3), `--dummy-erc20 N`, `--extra-args "<quoted certoraRun args>"`, `--clear-cache`.
 - Expect several prover jobs and LLM calls: compilation analysis → summary generation → call resolution loop (links + DISPATCHER summaries, ≤10 prover rounds) → loop_iter/hashing-bound tuning via parallel sanity jobs → warmup. Tens of minutes on a real protocol is normal.
 
 ## Outputs (what you use downstream)
@@ -46,8 +50,8 @@ Machine-readable alternative: add `--composer-setup out.json` — it writes `{"c
 ## Failure modes
 
 - **Main contract is abstract/interface** → explicit error; point at a concrete contract.
-- **Missing ANTHROPIC_API_KEY / .env** → immediate exit at startup. The check runs regardless of flags — `--skip-llm` does NOT avoid it; provide a key or a `.env` either way.
-- **Compilation failures** → it auto-tries per-contract compiler maps and an import-patching retry; if it still fails, read the solc errors in the log — usually a missing `solcX.Y` binary or remapping problem.
+- **Unset or empty ANTHROPIC_API_KEY with no .env** → immediate exit while importing, before any work. The check runs regardless of flags, so provide the variable either way. Since only non-emptiness is tested, a user with no Anthropic key can pass a placeholder together with `--skip-llm` and get a run with static-only summaries: a real quality loss on hard-to-verify library functions, so take it only when there is no key to use, and say so.
+- **Compilation failures** → it auto-tries per-contract compiler maps and an import-patching retry; if it still fails, read the solc errors in the log — usually a compiler that has not been provisioned yet, or a remapping problem. Two messages are terminal and say exactly what is wrong: `UnsatisfiableSolcPinError` names a contract whose pragma no installed compiler satisfies, and `ConflictingPragmaError` means one compilation unit spans files no single compiler can serve. A conf full of `solc8.X` names that nothing on PATH answers to means the alias directory is off PATH or short an alias; see SKILL.md Phase 3.
 - **"please check llm_summaries.spec for syntax errors"** → a generated summary didn't compile; the typechecker loop (10 rounds) gave up. Inspect `certora/specs/summaries/`.
 - **"Tried to register X as C but C does not exist"** → stale `<Main>_call_resolution.spec` from a previous scene. Current autosetup resets this file automatically at the start of every run, so seeing it means an outdated install or something else rewrote the file — empty the file, re-run, and consider upgrading.
 - **Stale cache after changing flags OR the scene** — the content cache keys on all project sources + main contract + solc version, but NOT on stage-skipping flags (`--skip-*`) and NOT on the positional contract list, so changing the closure you pass can silently reuse the previous scene's result. `--clear-cache` whenever you change flags or the scene.

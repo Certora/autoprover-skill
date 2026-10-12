@@ -1,0 +1,22 @@
+{
+  "name": "certora-skills",
+  "interface": {
+    "displayName": "Certora Skills"
+  },
+  "plugins": [
+    {
+      "name": "certora-verify",
+      "version": "0.1.0",
+      "description": "End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report.",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -2,11 +2,13 @@
 
 ## The official docs are the authority
 
-CVL and prover behavior must come from https://docs.certora.com/en/latest/ — never from intuition or half-remembered Solidity semantics (CVL diverges in load-bearing ways: `^` is exponentiation, values are immutable, out-of-bounds reads don't revert...). When unsure about syntax or semantics, fetch the relevant page below and read the whole section. Ask the docs single, self-contained "what" questions ("What is the syntax for a preserved block?"), locate the section, read it fully. Ignore changelog/"changes since" material.
+CVL and prover behavior must come from https://docs.certora.com/en/latest/ — never from intuition or half-remembered Solidity semantics (CVL diverges in load-bearing ways: `^` is exponentiation, values are immutable, out-of-bounds reads don't revert...). When unsure about syntax or semantics, retrieve the relevant page below and read the whole section. Ask the docs single, self-contained "what" questions ("What is the syntax for a preserved block?"), locate the section, read it fully. Ignore changelog/"changes since" material.
+
+Retrieve a page with whatever your agent has: a built-in web-fetch or browse tool if there is one, otherwise the shell. The pages are static HTML, so `curl -sL <url> -o page.html` and read the file, or strip the tags for prose (`curl -sL <url> | sed -e 's/<[^>]*>//g'`). If you have neither, say so to the user, work from the bundled references alone, and flag every CVL construct you could not confirm; recollection is not an accepted substitute for the docs.
 
 ### CVL language reference — `https://docs.certora.com/en/latest/docs/cvl/<page>`
 
-| Page | Covers | Fetch when |
+| Page | Covers | Consult when |
 |---|---|---|
 | `overview.html` | spec file anatomy | starting your first spec |
 | `basics.html` | lexical rules, top-level constructs | — |
@@ -73,7 +75,7 @@ Casts — these are the ones that actually exist; verify against `docs/cvl/types
 
 ## Judge checklist (the 8 feedback criteria)
 
-The reviewer subagent evaluates the spec against exactly these criteria — no style/maintainability feedback:
+The judge evaluates the spec against exactly these criteria — no style/maintainability feedback. This holds whether the judge is a separate sub-agent or the fresh-context review pass of Phase 6's sequential mode:
 
 1. **Code smells** — pointless type-bound requires; requires that only prevent reverts of non-`@withrevert` calls; purposeless methods-block entries; tautological asserts. (A check that the *implementation's output* matches an independently-computed expectation is NOT a tautology.)
 2. **Guideline compliance** — the 23 rules above (the reviewer must be given them, not just this checklist). Assume the spec already parses/typechecks. Prefer one "revert characteristic" rule (`assert lastReverted <=> <predicate>`) over many single-case revert rules — and inside such a rule a bare `require` should almost never appear (it silently truncates the `<=>` completeness claim); only `requireInvariant` is acceptable there.
@@ -84,4 +86,4 @@ The reviewer subagent evaluates the spec against exactly these criteria — no s
 7. **Meaningful contract interaction** — each rule's verdict must actually depend on contract behavior (a symbol read from the contract), not just free-variable arithmetic with decorative reads. Cure: assert against contract outputs.
 8. **Property coverage** — every property in the batch formalized or validly skipped. Inexpressibility claims must be checked against the docs, not taken on faith. A rule that `require`s a bounded array size and then checks the elements one by one is a valid approach — do NOT reject it as overconstrained; only unbounded quantification over dynamic arrays legitimately can't be expressed. Suggestions to change the Solidity are invalid.
 
-The judge returns approve/reject + concrete feedback; it should stay consistent with its prior feedback across rounds unless given hard evidence.
+The judge produces approve/reject + concrete feedback, written to the round's verdict file; it should stay consistent with its prior feedback across rounds unless given hard evidence.
