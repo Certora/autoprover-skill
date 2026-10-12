@@ -1,8 +1,8 @@
-# Resolving a timeout with the hosted timeout resolver
+# Resolving a timeout with the hosted Timeout Resolver
 
-The timeout resolver is a hosted AutoProver agent. Give it one prover run and one rule of that run. It searches for a pen-and-paper proof of the property and distills the lemmas the proof rests on. It instruments the source with inert hooks that encode those lemmas, discharges the lemmas in Lean, and runs the prover again. It returns patches for the source and the spec, the Lean file, and the evidence that the rule now verifies.
+The Timeout Resolver is a hosted AutoProver agent. Give it one prover run and one rule of that run. It searches for a pen-and-paper proof of the property and distills the lemmas the proof rests on. It instruments the source with inert hooks that encode those lemmas, discharges the lemmas in Lean, and runs the prover again. It returns patches for the source and the spec, the Lean file, and the evidence that the rule now verifies.
 
-You drive it through the Zeus public API, the same API that drives AutoProver runs. Create a run, poll it, read its result, then list and download its artifacts. Every call is a plain HTTPS request with a Zeus API key.
+You drive it through the Certora Runs API, the same API that drives AutoProver runs. Create a run, poll it, read its result, then list and download its artifacts. Every call is a plain HTTPS request with a Certora API key.
 
 Use it in two cases:
 
@@ -13,8 +13,8 @@ Do not use it for `VIOLATED`, `SANITY_FAILED`, or `ERROR`. Those have their own 
 
 ## What it needs
 
-- A Zeus API key in the environment variable `CERTORA_API_KEY`. The user creates the key on the API page of the organization in the Zeus dashboard. The key needs the permissions "Create runs", "Read runs and results", and "Cancel runs". This is not `CERTORAKEY`, the prover key. If the variable is empty, stop and ask the user for a key. Never print the key.
-- The API host. Production is `https://app.certora.com`. The dev and staging hosts are for Certora staff. The commands below keep the host in `ZEUS`.
+- A Certora API key in the environment variable `CERTORA_API_KEY`. The user creates the key on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. The key needs the permissions "Create runs", "Read runs and results", and "Cancel runs". This is not `CERTORAKEY`, the prover key. If the variable is empty, stop and ask the user for a key. Never print the key.
+- The API host. Production is `https://app.certora.com`. The dev and staging hosts are for Certora staff. The commands below keep the host in `CERTORA_API_BASE_URL`, the name the API's own documentation uses.
 - The run link that `certoraRun` printed, on `prover.certora.com`. Remove the `anonymousKey` part. The service strips it in any case. The run and the key must belong to the same environment. A key from `app.certora.com` resolves runs on `prover.certora.com` and nothing else.
 - The rule name, and the property the rule formalizes: its `title`, `description`, and `sort` from `certora/properties/<slug>.properties.json`. The `rules` list in `certora/properties/<slug>.property_rules.json` maps the property to its rules.
 
@@ -23,8 +23,8 @@ You must own the run, or be a member of the owner's organization with read acces
 Before the first run, make sure that the key can start resolver runs:
 
 ```bash
-ZEUS=https://app.certora.com
-curl -sS "$ZEUS/v2/access" -H "Authorization: Bearer $CERTORA_API_KEY"
+CERTORA_API_BASE_URL=https://app.certora.com
+curl -sS "$CERTORA_API_BASE_URL/v2/access" -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
 `capabilities.run_types` must list `timeout_resolver`. If it does not, the resolver is not enabled for this key. Say so and continue with the manual playbook.
@@ -40,7 +40,7 @@ A refused call answers with `application/problem+json`. The body holds `status`,
 Start one run per rule. The create call needs an `Idempotency-Key` header of 1 to 200 characters. Use one key per rule, for example `<slug>-<ruleName>-1`. A retry with the same key and the same body returns the same run and starts nothing. A new key starts a new run, and a new run is a new charge.
 
 ```bash
-curl -sS -X POST "$ZEUS/v2/timeout-resolver-runs" \
+curl -sS -X POST "$CERTORA_API_BASE_URL/v2/timeout-resolver-runs" \
   -H "Authorization: Bearer $CERTORA_API_KEY" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: <slug>-<ruleName>-1" \
@@ -70,7 +70,7 @@ The reply is `202` with a `run` object. Keep `run.id`. Record it in the commenta
 A run takes between 30 minutes and a few hours. Poll every 60 seconds, with a progress note on each poll:
 
 ```bash
-curl -sS "$ZEUS/v2/runs/<run_id>" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>" -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
 `run.status` is one of `queued`, `running`, `finalizing`, `succeeded`, `failed`, `cancelling`, `cancelled`. Stop polling at `succeeded`, `failed`, or `cancelled`. The other values mean the run is still moving. While it moves, `run.progress.phase` names the current step.
@@ -80,7 +80,7 @@ curl -sS "$ZEUS/v2/runs/<run_id>" -H "Authorization: Bearer $CERTORA_API_KEY"
 To stop a run, cancel it:
 
 ```bash
-curl -sS -X POST "$ZEUS/v2/runs/<run_id>/cancel" \
+curl -sS -X POST "$CERTORA_API_BASE_URL/v2/runs/<run_id>/cancel" \
   -H "Authorization: Bearer $CERTORA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -93,7 +93,7 @@ The reply is `202`. The run moves through `cancelling` to `cancelled`.
 Read the result document once the run is `succeeded`. It is not a downloadable artifact, and this route is the only way to read it.
 
 ```bash
-curl -sS "$ZEUS/v2/runs/<run_id>/result" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/result" -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
 The reply is an envelope around the document. The fields a client can rely on are `schema_version`, `run_id`, `run_type`, and `data`. The document itself is `data`. Inside `data`, rely on `status`, `message`, `run`, `products`, `outcome`, `compiler_output`, and `error`. A key that is absent is not published. Do not depend on anything else.
@@ -109,7 +109,7 @@ Take these from `data`:
 Then list the artifacts. Before the run is `succeeded`, the list call answers 409 with code `artifacts_not_ready`.
 
 ```bash
-curl -sS "$ZEUS/v2/runs/<run_id>/artifacts" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/artifacts" -H "Authorization: Bearer $CERTORA_API_KEY"
 ```
 
 The reply holds `artifacts` and `next_cursor`. Each artifact has `name`, `path`, `category`, `size_bytes`, `last_modified_at`, and `download_url`. The resolver returns four files, so one page holds them all and `next_cursor` is null. Each `download_url` is a presigned link that expires after a short time. Download every file right after you list them. If a download is refused, list again and use the fresh link.
@@ -145,4 +145,4 @@ For `gave_up`, `unresolved`, or `budget_exhausted`, the rule still times out. Re
 
 ## Cost
 
-A resolver run is charged to your organization's balance. zeus reserves a fixed amount per run and refunds the unused part when the run settles. Start one resolver run per rule, not one per iteration. If a rule times out again after a resolution, go back to the manual playbook before starting a second run.
+A resolver run is charged to your organization's balance. At launch the service holds a fixed amount, and at settlement it refunds the unused part. Start one resolver run per rule, not one per iteration. If a rule times out again after a resolution, go back to the manual playbook before starting a second run.
