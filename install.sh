@@ -17,7 +17,9 @@
 # can remove yourself.
 #
 # Written for bash 3.2, the version macOS still ships: no associative arrays,
-# no `readarray`, no `${var^^}`. Lists are space-separated strings.
+# no `readarray`, no `${var^^}`. A directory a user names can hold a space, so
+# the install targets travel as an indexed array and as one line each, never as
+# a space-separated string.
 
 set -euo pipefail
 
@@ -72,7 +74,7 @@ DO_SKILL=1
 COPY=0
 REINSTALL=0
 ASSUME_YES=0
-SKILL_DIRS=""             # --dir overrides the table entirely
+SKILL_DIRS=()             # --dir overrides the table entirely
 REF_OVERRIDE=""
 WARNINGS=""
 
@@ -168,7 +170,7 @@ parse_args() {
       --reinstall)    REINSTALL=1 ;;
       --dir)
         [ $# -ge 2 ] || die "--dir needs a path."
-        SKILL_DIRS="$SKILL_DIRS $2"; shift ;;
+        SKILL_DIRS+=("$2"); shift ;;
       --autoprover-ref)
         [ $# -ge 2 ] || die "--autoprover-ref needs a git ref."
         REF_OVERRIDE="$2"; shift ;;
@@ -346,8 +348,8 @@ report_path() {
 # AGENT_TABLE whose home exists or whose binary is on PATH.
 skill_targets() {
   local dir key home binary
-  if [ -n "$SKILL_DIRS" ]; then
-    for dir in $SKILL_DIRS; do printf '%s\n' "$dir"; done
+  if [ "${#SKILL_DIRS[@]}" -gt 0 ]; then
+    for dir in "${SKILL_DIRS[@]}"; do printf '%s\n' "$dir"; done
     return 0
   fi
   while IFS='|' read -r key home binary; do
@@ -367,8 +369,17 @@ EOF
 install_skill() {
   step "The $SKILL_NAME skill"
 
-  local mode dir dest targets failures=0 current
-  targets=$(skill_targets)
+  local mode dir dest failures=0 current
+  # One line per directory, read into an array, so a path that holds a space
+  # stays one destination and a path that holds a wildcard stays itself.
+  local targets=()
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    targets+=("$dir")
+  done <<EOF
+$(skill_targets)
+EOF
+  [ "${#targets[@]}" -gt 0 ] || die "no skill directory to write."
 
   # A symlink means `git pull` in this checkout updates every install. A copy
   # is the right answer when there is nothing to pull from, so the default
@@ -384,10 +395,10 @@ install_skill() {
   say "  Source: $SKILL_SRC"
   say "  Mode:   $mode"
   say "  Into:"
-  for dir in $targets; do say "      $dir/$SKILL_NAME"; done
+  for dir in "${targets[@]}"; do say "      $dir/$SKILL_NAME"; done
   confirm "  Proceed?" || die "declined."
 
-  for dir in $targets; do
+  for dir in "${targets[@]}"; do
     dest="$dir/$SKILL_NAME"
 
     if [ -L "$dest" ]; then
