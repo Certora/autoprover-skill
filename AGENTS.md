@@ -55,7 +55,9 @@ Two things to know before you stop over them:
   autosetup's own extractor for Hardhat) rather than its pragmas, install what it resolves to
   with `solc-select install`, and reach each version through a directory of aliases named the
   way autosetup names a compiler in a conf, put in front of PATH for the run alone. Nothing is
-  selected globally, and the conf keeps the per-contract names.
+  selected globally. Foundry's per-file assignments reach the conf. For a build system whose
+  per-file assignments autosetup drops, Hardhat among them, Phase 3 stops before autosetup when
+  the plan gives different compilers to different files, and says which files disagree.
 
 ## House rules for this flow
 
