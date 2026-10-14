@@ -27,8 +27,8 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
    prover must model. A design document helps but is optional.
 2. Builds a working prover setup with `certora-autosetup`.
 3. Writes security properties for each component and formalizes them in CVL.
-4. Verifies them with the cloud prover, reviewing and fixing the specs until the runs are
-   clean.
+4. Verifies them with the cloud prover, reviewing the specs and investigating failures,
+   recording verified properties, suspected bugs, and unresolved cases.
 5. Writes a report.
 
 The report includes suspected bugs and counterexamples, alongside verified properties and
@@ -62,24 +62,28 @@ cd autoprover-skill
 ```
 
 The installer installs `uv`, then `certora-autosetup` and `certoraRun` from AutoProver, and
-`solc-select`. It links the skill into every agent skill directory it finds:
+`solc-select`. It links the skill into the skill directory of every agent it finds, and always
+into `~/.agents/skills`:
 
 | Agent | Skill directory |
 |---|---|
-| Claude Code | `~/.claude/skills`, or `.claude/skills` per project |
+| Claude Code | `~/.claude/skills` |
 | Cursor | `~/.cursor/skills` |
 | Gemini CLI | `~/.gemini/skills` |
 | opencode | `~/.config/opencode/skills` |
 | Codex | `~/.codex/skills` and `~/.agents/skills` |
 | Goose | `~/.config/goose/skills` |
-| anything else | `~/.agents/skills`, or `.agents/skills` per project |
+| anything else | `~/.agents/skills` |
 
-Then put the tools on PATH and export your keys, in your shell startup file:
+For a project-local directory such as `.claude/skills`, pass `--dir <path>`.
+
+Add the PATH line the installer prints to your shell startup file, export your keys there,
+then restart your agent so it inherits the environment:
 
 ```sh
-export PATH="$(uv tool dir --bin):$PATH"
+export PATH="$HOME/.local/bin:$PATH"   # the line the installer prints
 export CERTORAKEY=...
-export CERTORA_API_KEY=...   # optional
+export CERTORA_API_KEY=...             # optional
 ```
 
 ## Run it
@@ -118,6 +122,9 @@ Everything goes under the project's `certora/` directory:
 | `npx skills add` | Run the same `npx skills add` command again. |
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-verify` |
 
+These update the skill, not its tools. If the update changes
+`skills/certora-verify/AUTOPROVER_REF`, also run `./install.sh --deps-only --reinstall`.
+
 ## Other ways to install
 
 These routes install the skill only. Install the tools afterwards with
@@ -133,7 +140,8 @@ claude plugin install certora-verify@certora-skills
 ```
 
 For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
-or paste `skills/certora-verify/SKILL.md` into its context.
+or paste `skills/certora-verify/SKILL.md` into its context. Keep this repository accessible
+to the agent so it can read the files `SKILL.md` refers to.
 
 ## Advanced
 
@@ -141,7 +149,7 @@ or paste `skills/certora-verify/SKILL.md` into its context.
 
 To see the whole plan without changing anything, run `./install.sh </dev/null`.
 
-- `--skill-only` and `--deps-only` run one half.
+- `--skill-only` or `--deps-only` installs only the skill or only its tools.
 - `--dir <path>` writes the skill to a directory of your choice.
 - `--copy` copies the skill instead of symlinking it.
 - `--reinstall` re-resolves the tools and lets uv take over command names another tool owns.
