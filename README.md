@@ -117,36 +117,9 @@ rm ~/.agents/skills/certora-verify          # the skill, in each agent directory
 Remove compilers first: `solc-select uninstall` is the only command that knows the compiler
 store. The installer writes to no shell startup file, so there is nothing to undo there.
 
-### Manual install
+### skills CLI
 
-Put `skills/certora-verify/` where your agent looks for skills. A symlink is enough, and it
-keeps the skill updating with `git pull`. If the target directory does not exist, create it
-first:
-
-```sh
-# Claude Code, for this project only
-mkdir -p .claude/skills && ln -s "$PWD/skills/certora-verify" .claude/skills/certora-verify
-# Claude Code, for every project
-mkdir -p ~/.claude/skills && ln -s "$PWD/skills/certora-verify" ~/.claude/skills/certora-verify
-# Codex
-mkdir -p ~/.codex/skills && ln -s "$PWD/skills/certora-verify" ~/.codex/skills/certora-verify
-# Cursor
-mkdir -p ~/.cursor/skills && ln -s "$PWD/skills/certora-verify" ~/.cursor/skills/certora-verify
-# Gemini CLI
-mkdir -p ~/.gemini/skills && ln -s "$PWD/skills/certora-verify" ~/.gemini/skills/certora-verify
-# opencode
-mkdir -p ~/.config/opencode/skills && ln -s "$PWD/skills/certora-verify" ~/.config/opencode/skills/certora-verify
-# any agent that reads the shared location
-mkdir -p ~/.agents/skills && ln -s "$PWD/skills/certora-verify" ~/.agents/skills/certora-verify
-```
-
-The directory name must stay `certora-verify`. The Agent Skills standard requires it to match
-the `name` in the frontmatter.
-
-This installs the skill only. For the toolchain, run `./install.sh --deps-only` or follow
-[Requirements](#requirements).
-
-The [`skills` CLI](https://github.com/vercel-labs/skills) installs a skill from any GitHub
+The [`skills` CLI](https://github.com/vercel-labs/skills) installs the skill from this
 repository:
 
 ```sh
@@ -198,12 +171,10 @@ defect in it. The skill reports such a rule and never weakens the spec to turn i
 
 ## Requirements
 
-`install.sh` sets up everything in this section. It is written out so that a manual install
-is possible, and so that you can see what is on your machine afterwards.
+`install.sh` sets up everything in this section except the keys.
 
-**`certora-autosetup`.** It is the CLI of the `ai-composer` package, which lives in
-[Certora/AutoProver](https://github.com/Certora/AutoProver) and is not on PyPI. It installs
-from the git URL at the pinned commit:
+**`certora-autosetup` and `certoraRun`.** Both come from the `ai-composer` package of
+[Certora/AutoProver](https://github.com/Certora/AutoProver):
 
 ```sh
 GIT_CONFIG_COUNT=1 \
@@ -213,16 +184,8 @@ uv tool install --python 3.12 --with-executables-from certora-cli \
   "ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@$(cat skills/certora-verify/AUTOPROVER_REF)"
 ```
 
-Keep the `GIT_CONFIG_*` variables. A submodule of AutoProver is recorded with an SSH URL, and
-without the rewrite the install fails for anyone without a GitHub SSH key. Keep the
-`[certora-cli]` extra. It is what brings in the prover CLI. Do not add the `ml` extra. It pulls
-in torch and the CUDA wheels, and nothing on this path uses them. Expect a large install: about
-164 packages and 736 MB, several minutes on a cold cache.
-
-**`certoraRun`.** `--with-executables-from certora-cli` puts it on PATH together with the
-other certora-cli commands, and `uv tool uninstall ai-composer` removes them again. If uv
-answers `Executables already exist`, a standalone `certora-cli` tool owns those names. Remove
-it with `uv tool uninstall certora-cli`, or add `--force`.
+If uv answers `Executables already exist`, remove the standalone tool with
+`uv tool uninstall certora-cli`, or add `--force`.
 
 **PATH.** One directory must be on it:
 
@@ -230,57 +193,34 @@ it with `uv tool uninstall certora-cli`, or add `--force`.
 export PATH="$(uv tool dir --bin):$PATH"
 ```
 
-That is normally `~/.local/bin`. It holds `certora-autosetup`, `certoraRun`, `solc-select` and
-the `solc` that solc-select dispatches. The installer prints the line. Add it to a startup
-file yourself.
+Add the line to your shell startup file.
 
-**Java.** `certora-autosetup` runs `java -jar` with no fallback, so Java 19 or newer is
-required, 21 recommended. On macOS, `brew install openjdk@21` and follow the PATH hint brew
-prints. On Debian or Ubuntu, install `openjdk-21-jdk`.
+**Java.** Java 19 or newer, 21 recommended. On macOS, `brew install openjdk@21` and follow the
+PATH hint brew prints. On Debian or Ubuntu, install `openjdk-21-jdk`.
 
-**`CERTORAKEY`.** Your account on the Certora cloud prover, and where the prover cost goes.
-Phases 3, 5 and 6 submit real cloud jobs. A single full run takes tens of minutes and can run
-up to the two hour job timeout. A verification of a real protocol runs many of them. Know
-what a run costs before you start one on a metered account.
+**`CERTORAKEY`.** Your key for the Certora cloud prover. Phases 3, 5 and 6 submit cloud jobs
+under it, each of which can run up to two hours.
 
 **`CERTORA_API_KEY`.** The organization API key of the Certora Runs API. Create it on the
 organization's API Access page at `app.certora.com` with the scopes "Create runs", "Read runs
-and results", "Cancel runs" and "Download artifacts". It is not `CERTORAKEY`. Only the hosted
-Timeout Resolver in Phase 6 uses it, so a run with no timeout never asks for it.
+and results", "Cancel runs" and "Download artifacts". Only the hosted Timeout Resolver in
+Phase 6 uses it.
 
-**`ANTHROPIC_API_KEY`. Not required.** The skill runs `certora-autosetup --skip-llm`, which
-makes no LLM calls. autosetup still refuses to start when the variable is empty, so the skill
-exports a placeholder:
+**`ANTHROPIC_API_KEY`.** Not required. The skill runs autosetup with `--skip-llm` and sets a
+placeholder itself.
 
-```sh
-export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-skip-llm-placeholder}"
-```
-
-With a real key you can drop `--skip-llm` and get LLM-written summaries for library and
-external functions, billed to that key.
-
-**solc.** The installer ships no Solidity compiler. Compilers are managed by
-[solc-select](https://github.com/crytic/solc-select):
+**solc.** Compilers are managed by [solc-select](https://github.com/crytic/solc-select). The
+skill installs the versions each project needs in Phase 3:
 
 ```sh
 uv tool install solc-select                          # or pipx, or pip
 env -u VIRTUAL_ENV solc-select install 0.8.27        # every version the project resolves to
 ```
 
-Phase 3 answers which versions a project needs from the project's build plan, not from its
-pragmas: `forge compiler resolve` for Foundry, the Hardhat configuration for Hardhat. The
-skill installs each version. It gives each one the name autosetup writes into a conf, such as
-`solc8.27`, through a directory of aliases it puts in front of PATH for the run. A project
-that needs several compilers at once is ordinary. The conf records which compiler compiled
-which contract.
+No path on PATH may contain a space. On Apple silicon, compilers before 0.8.5 need Rosetta 2
+(`softwareupdate --install-rosetta`).
 
-Three details matter. Use `env -u VIRTUAL_ENV`, because solc-select moves its whole store
-into `$VIRTUAL_ENV/.solc-select` when that variable is set. Keep spaces out of every path on
-PATH, because `certoraRun` splits the compiler command on whitespace. On Apple silicon,
-compilers before 0.8.5 are Intel only and need Rosetta 2 (`softwareupdate --install-rosetta`).
-
-Phase 0 of the skill checks all of the above and stops with a specific message if something is
-missing.
+Phase 0 of the skill checks all of the above and stops with a message naming what is missing.
 
 ## Layout
 
