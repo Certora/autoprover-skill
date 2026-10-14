@@ -81,7 +81,7 @@ Add the PATH line the installer prints to your shell startup file, export your k
 then restart your agent so it inherits the environment:
 
 ```sh
-export PATH="$HOME/.local/bin:$PATH"   # the line the installer prints
+export PATH="$HOME/.local/bin:$PATH"   # example: use the path the installer prints
 export CERTORAKEY=...
 export CERTORA_API_KEY=...             # optional
 ```
