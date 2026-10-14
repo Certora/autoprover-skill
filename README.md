@@ -37,10 +37,8 @@ the machine.
 | Goose | `~/.config/goose/skills` |
 | anything else | `~/.agents/skills`, or `.agents/skills` per project |
 
-The host agent needs two things. It needs a shell that can leave a command running for up to
-about two hours while the agent polls its log. It also needs a way to read pages under
-https://docs.certora.com/en/latest/, either a web fetch tool or `curl`. Sub-agents are
-optional: the skill uses them when the agent has them.
+The agent needs a shell that can keep a command running for up to two hours while it polls
+the log, and a way to read https://docs.certora.com/en/latest/ (a web fetch tool or `curl`).
 
 ## Install
 
