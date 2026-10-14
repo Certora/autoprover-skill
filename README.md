@@ -50,11 +50,10 @@ cd autoprover-skill
 
 `install.sh` installs the toolchain the skill drives and links the skill into every agent
 skill directory it finds. It does not set `CERTORAKEY` or `CERTORA_API_KEY`. You export those
-yourself. See [Requirements](#requirements) for what each piece is for.
+yourself. See [Requirements](#requirements).
 
-It installs no Solidity compiler. It installs
-[solc-select](https://github.com/crytic/solc-select), which manages compilers, and the skill
-installs the versions each project needs in Phase 3.
+It installs [solc-select](https://github.com/crytic/solc-select), which manages compilers, and
+the skill installs the versions each project needs in Phase 3.
 
 To see the whole plan without changing anything, run it with stdin closed:
 
@@ -73,10 +72,10 @@ Options:
 
 `./install.sh --help` lists them all.
 
-### The AutoProver pin
+### Updating AutoProver
 
-`install.sh` installs `ai-composer` from a fixed AutoProver commit, so two installs a month
-apart behave the same way. The commit is in one file beside the skill:
+`install.sh` installs `ai-composer` from the AutoProver commit named in one file beside the
+skill:
 
 ```sh
 cat skills/certora-verify/AUTOPROVER_REF   # a 40-character commit sha, on one line
@@ -90,7 +89,7 @@ git ls-remote https://github.com/Certora/AutoProver master   # the current maste
 ./install.sh --deps-only --reinstall
 ```
 
-`--reinstall` is what makes the new pin take effect. To try a branch or a commit without
+`--reinstall` is what makes the new commit take effect. To try a branch or a commit without
 editing the file, pass `--autoprover-ref <ref>`.
 
 ### Updating
@@ -101,7 +100,7 @@ editing the file, pass `--autoprover-ref <ref>`.
 | `./install.sh --copy` | `git pull`, then `./install.sh --skill-only --copy` to overwrite the copies. |
 | `npx skills add` | run the same `npx skills add` command again. |
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-verify`. |
-| toolchain, after a pin bump | `./install.sh --deps-only --reinstall`. |
+| toolchain, after changing the AutoProver commit | `./install.sh --deps-only --reinstall`. |
 
 ### Removing it
 
