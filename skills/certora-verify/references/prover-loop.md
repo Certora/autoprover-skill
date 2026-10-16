@@ -71,7 +71,7 @@ Reconstruct the concrete failing scenario from the trace — what state the prov
 | **Parametric rule persistently fails on a method that genuinely shouldn't be covered** | `filtered { f -> ... }` — only at ~95% certainty that exclusion is correct. |
 | **The property itself is wrong** | Skip it with justification (judge must accept); remove its rules. |
 | **SANITY_FAILED** | The assert is unreachable: your `require`s contradict the code's own assumptions, or a non-`@withrevert` call always reverts under your preconditions. Hunt the contradiction; don't paper over it. |
-| **TIMEOUT** | Reduce scope: split the rule, summarize expensive irrelevant methods (`DELETE` for timeout-causing irrelevant ones), check the user-guide timeout page. |
+| **TIMEOUT** | Reduce scope: split the rule, summarize expensive irrelevant methods (`DELETE` for timeout-causing irrelevant ones), check the user-guide timeout page. If that does not resolve it, hand the run and the rule to the hosted Timeout Resolver (`timeout-resolver.md`), which finds the lemmas the proof rests on, encodes them as inert hooks with Lean certificates, and returns patches. |
 | **ERROR** | Read the rule's error message in the report; often conf/scene problems (missing file, bad link). |
 
 Anything else: consult the docs and make *principled* changes — never brute-force random edits hoping the prover accepts.

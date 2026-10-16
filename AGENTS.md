@@ -14,12 +14,13 @@ contract X with the prover", "write a Certora spec for X and run it".
 ## What to read
 
 `skills/certora-verify/SKILL.md` is the flow of record: phases 0-7. Read it in full before
-acting. It names four references, each read when its phase needs it:
+acting. It names five references, each read when its phase needs it:
 
 - `skills/certora-verify/references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
 - `skills/certora-verify/references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
 - `skills/certora-verify/references/cvl-pitfalls.md`, prover traps that are on no single docs page
 - `skills/certora-verify/references/prover-loop.md`, building confs, running `certoraRun`, reading results
+- `skills/certora-verify/references/timeout-resolver.md`, handing a timed-out rule to the hosted Timeout Resolver and applying what it returns
 
 `skills/certora-verify/evals/evals.json` is a dev-time eval set for working on the skill, not
 part of running it. Two of its three evals submit real cloud prover jobs and cost money.
@@ -43,8 +44,12 @@ Phase 0 checks the machine: `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Jav
 newer, and a compiler manager. It stops with a specific message if one is missing.
 `./install.sh` installs the toolchain and places the skill; it installs no compiler.
 
-Two things to know before you stop over them:
+Three things to know before you stop over them:
 
+- `CERTORA_API_KEY` is the organization API key of the Certora Runs API, and it is not
+  `CERTORAKEY`. Phase 6 uses it only for the hosted Timeout Resolver, so a run with no
+  timeout never asks for it. `references/timeout-resolver.md` lists the four permissions
+  the key needs.
 - No Anthropic key is needed. The flow runs `certora-autosetup --skip-llm`, which turns off
   every LLM call autosetup makes. The variable is still read at import and only its
   non-emptiness is checked, never the value, so export a placeholder and move on. Summaries

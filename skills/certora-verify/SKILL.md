@@ -8,7 +8,9 @@ compatibility: >-
   docs.certora.com, and the Solidity compilers the target project pins, which Phase 3
   installs with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
   needed: autosetup
-  runs with --skip-llm, and the variable it checks at import takes a placeholder.
+  runs with --skip-llm, and the variable it checks at import takes a placeholder. For the
+  hosted Timeout Resolver that Phase 6 can fall back on, also a CERTORA_API_KEY and network
+  access to app.certora.com.
 metadata:
   version: "0.1.0"
   author: certora
@@ -55,7 +57,7 @@ Every phase writes its result under the project's `certora/` directory, so an in
 | `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md`, `certora/properties/<slug>.judge-round<N>.md` | Phase 6 |
 | `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
 
-Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
+Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
 Long-running commands (autosetup, and every full certoraRun) take tens of minutes to ~2h, longer than a single foreground command should hold your session. **Start them detached and poll their log.** The portable formulation needs nothing but a shell:
 
@@ -100,6 +102,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
   Two machine facts that belong here rather than in Phase 3. solc-select moves its whole store into an active virtualenv, so every `solc-select` command in this flow runs under `env -u VIRTUAL_ENV`. And no directory holding a compiler may contain a space: certoraRun builds the compiler command as one string and splits it on whitespace.
 
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
+- Optional: a Certora API key in `CERTORA_API_KEY` (`references/timeout-resolver.md`). Phase 6 uses it only when a rule times out and the manual fixes are exhausted. Its absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user for a key then.
 
 ## Phase 1 — Design document (optional but valuable)
 
@@ -243,12 +246,12 @@ The loop, the artifacts, the barrier rule for `invariants.spec`, the round cap a
 Keep a set of **open** components (initially all of them). Each round:
 
 1. **Generate** — run one *generator* per open component. In parallel mode, spawn them all at once and **wait for the whole batch** before continuing; in sequential mode, work through the open components one after another until each has a fresh spec. Give each generator: its component's property list, the relevant contract source, the exact import lines to copy from `sanity-<Main>.spec`, `references/cvl-writing.md` + `references/cvl-pitfalls.md`, and — on rounds after the first — its previous spec plus the judge feedback that rejected it. It runs the **Generator procedure** below and produces: the spec + `property_rules.json` it wrote, its full prover status, any structural-invariant requests, and notes.
-2. **Barrier housekeeping** — if any generator asked for a new structural invariant, add it to the shared `certora/specs/invariants.spec` **yourself now**, at the barrier: after all generation for the round, before any judging (a generator never writes that file: every component imports it, so an edit inside the generation window either races a parallel generator or silently changes the file underneath a spec that was already judged), re-verify it with the Phase 5 gate, and only then proceed, so the next round of generation imports a consistent, proven file.
+2. **Barrier housekeeping** — if any generator asked for a new structural invariant, add it to the shared `certora/specs/invariants.spec` **yourself now**, at the barrier: after all generation for the round, before any judging (a generator never writes that file: every component imports it, so an edit inside the generation window either races a parallel generator or silently changes the file underneath a spec that was already judged), re-verify it with the Phase 5 gate, and only then proceed, so the next round of generation imports a consistent, proven file. Resolver patches are barrier work for the same reason. A generator hands them back instead of applying them, because `source.patch` reaches scene contracts and shared helpers. Apply them here, re-run the Phase 5 gate on `invariants.spec`, then re-run the full unfiltered run for every component the patched files reach, including a component its judge already accepted on the earlier source. A clean run against source that a patch has since changed is not evidence.
 3. **Judge** — run one *judge* per component that a generator just produced. In parallel mode, spawn the batch and **wait for all of it**; in sequential mode, judge each component in turn under the discipline in *Sequential mode* below. Give each judge the **Judge inputs** below; each produces accept / reject + concrete feedback, written to `certora/properties/<slug>.judge-round<N>.md` in both modes, before any fix is applied.
-4. **Partition** — a component *leaves* the open set only when, this round, its judge **ACCEPTED** the produced spec **and** that generator's full unfiltered prover run was clean (every rule VERIFIED or expected-to-fail). Everything else stays open, carrying its judge feedback into the next Generate. Regenerate and re-judge **only** the still-open components.
+4. **Partition** — a component *leaves* the open set only when, this round, its judge **ACCEPTED** the produced spec **and** that generator's full unfiltered prover run was clean (every rule VERIFIED or expected-to-fail). Everything else stays open, carrying its judge feedback into the next Generate. Regenerate and re-judge **only** the still-open components. A component the barrier re-ran is partitioned on that re-run, never on the run its generator filed. A re-run that is not clean **reopens** the component: replace its recorded prover status with the re-run, carry the patch that broke it as the feedback, and put it back in the open set before you partition. The report reads the replaced status, so a stale clean run never reaches it.
 5. Repeat until the open set is empty (convergence) — or a component hits the per-component round cap (below), which closes it via the deadlock rule.
 
-Because rounds are synchronized but the open set shrinks, a component that converges in round 1 is done while slower siblings keep ping-ponging; you only redo work for what remains open.
+Because rounds are synchronized but the open set shrinks, a component that converges in round 1 is done while slower siblings keep ping-ponging; you only redo work for what remains open. One thing reopens a closed component: a barrier patch whose re-run it fails.
 
 ### Sequential mode (no sub-agents)
 
@@ -272,6 +275,7 @@ Consult the docs pages while authoring — particularly Methods Block/summaries,
 - Build the `property_rules` mapping (every non-skipped property title → the rule/invariant name(s) that verify it) and persist it to `certora/properties/<slug>.property_rules.json` — it gates completion and feeds the report, so it must survive a restart.
 - Typecheck first: `certoraRun <conf> --compilation_steps_only` (fast ~1 min); fix all type/parse errors before anything else (the judge assumes the spec typechecks).
 - Then prove: build the conf as the setup base plus the overlay defined in `references/prover-loop.md` (single source of truth for the overlay; it includes `wait_for_results: "all"`, load-bearing because the base conf ships `wait_for_results: none`). Run certoraRun (mechanics, status parsing, counterexample extraction all in that reference). For each non-verified rule, analyze the trace, classify the root cause, and apply the remediation playbook there: missing-invariant `requireInvariant`, sound summaries for havocs (never `NONDET` on side-effecting functions, never `persistent` ghosts to dodge a havoc), `filtered` blocks at ~95% certainty, expected-failure for a rule that exposes a genuine bug OR that fails only due to an exhausted prover limitation (record which), skip for genuinely-invalid properties, contradictory-`require` hunt for sanity failures.
+- A rule that still ends TIMEOUT after the playbook's scope reductions can go to the hosted Timeout Resolver: one call per rule with the run link and the property, as `references/timeout-resolver.md` describes. Download its files, then stop. Do not apply a resolver patch yourself: `source.patch` reaches scene contracts and shared helpers, so a patch applied inside the generation window changes the source underneath a parallel sibling and underneath a component a judge has already accepted. Hand back the resolver result, the downloaded files and the patches you propose, the same way you hand back a structural-invariant request, and let the barrier apply them. A resolver result other than `resolved` leaves the rule a TIMEOUT: read its informal proof for the missing lemma, then continue by hand.
 - Iterate write→prove yourself until the full unfiltered run is clean (all VERIFIED or expected-to-fail) or you've exhausted principled fixes. Write the per-component commentary (`certora/properties/<slug>.commentary.md`). **Hand over** the final spec, `property_rules`, the full prover status (including expected-fail markings + reasons), and any structural-invariant requests, then stop generating and let the judging pass take over; generation never reviews its own work in the same pass.
 
 ### Judge inputs (the judge role)
@@ -280,7 +284,7 @@ A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-con
 
 ### Per-component round cap / deadlock
 
-If the judge keeps demanding a change that then makes the prover fail (or vice versa), a component can ping-pong forever. Cap it at ~3 gen↔judge rounds without that component converging. On hitting the cap, close it: keep the most defensible spec, and either record the offending property as skipped with the conflict documented, or mark the rule expected-to-fail with the reason. Cloud runs are expensive — an unbounded cycle is a failure mode, not diligence.
+If the judge keeps demanding a change that then makes the prover fail (or vice versa), a component can ping-pong forever. Cap it at ~3 gen↔judge rounds without that component converging. On hitting the cap, close it: keep the most defensible spec, and either record the offending property as skipped with the conflict documented, or mark the rule expected-to-fail with the reason. Cloud runs are expensive — an unbounded cycle is a failure mode, not diligence. A component the barrier reopened starts a fresh count, because its earlier rounds did converge. If it reaches the cap again, close it the same way, and say in the report that a resolver patch reopened it.
 
 ### Completion (per component)
 
@@ -294,5 +298,6 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
 - Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only).
+- Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.
