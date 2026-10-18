@@ -46,10 +46,10 @@ newer, and a compiler manager. It stops with a specific message if one is missin
 
 Three things to know before you stop over them:
 
-- `CERTORA_API_KEY` is the organization API key of the Certora Runs API, and it is not
-  `CERTORAKEY`. Phase 6 uses it only for the hosted Timeout Resolver, so a run with no
-  timeout never asks for it. `references/timeout-resolver.md` lists the four permissions
-  the key needs.
+- `CERTORAKEY` carries one organization API key, for the prover and for the Certora Runs
+  API that Phase 6 drives. A run with no timeout never reaches the Runs API, so a key
+  without its permissions still gets through every other phase.
+  `references/timeout-resolver.md` lists the permissions the key needs.
 - No Anthropic key is needed. The flow runs `certora-autosetup --skip-llm`, which turns off
   every LLM call autosetup makes. The variable is still read at import and only its
   non-emptiness is checked, never the value, so export a placeholder and move on. Summaries
