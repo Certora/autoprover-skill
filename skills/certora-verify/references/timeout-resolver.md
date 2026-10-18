@@ -13,7 +13,7 @@ Do not use it for `VIOLATED`, `SANITY_FAILED`, or `ERROR`. Those have their own 
 
 ## What it needs
 
-- A Certora API key in the environment variable `CERTORA_API_KEY`. The user creates the key on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. Tick four permissions: "Create runs", "Read runs and results", "Cancel runs", and "Download artifacts". Permissions cannot be changed after the key is created. A key without "Download artifacts" completes the paid run and then cannot fetch one file. The Runs API also needs a plan that includes it. This is not `CERTORAKEY`, the prover key. If the variable is empty, stop and ask the user for a key. Never print the key.
+- The organization API key in the environment variable `CERTORAKEY`, the same key the prover runs on. The user creates it on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. Four permissions matter here: "Create runs", "Read runs and results", "Cancel runs", and "Download artifacts". Permissions cannot be changed after the key is created. A key without "Download artifacts" completes the paid run and then cannot fetch one file. The Runs API also needs a plan that includes it. If the variable is empty, or the key lacks these permissions, stop and ask the user for a key that has them. Never print the key.
 - The API host. Production is `https://app.certora.com`. The dev and staging hosts are for Certora staff. The commands below keep the host in `CERTORA_API_BASE_URL`, the name the API's own documentation uses.
 - The run link that `certoraRun` printed, on `prover.certora.com`. Remove the `anonymousKey` part. The service strips it in any case. The run and the key must belong to the same environment. A key from `app.certora.com` resolves runs on `prover.certora.com` and nothing else.
 - The rule name, and the property the rule formalizes: its `title`, `description`, and `sort` from `certora/properties/<slug>.properties.json`. The `rules` list in `certora/properties/<slug>.property_rules.json` maps the property to its rules.
@@ -24,7 +24,7 @@ Before the first run, read the key's permissions:
 
 ```bash
 CERTORA_API_BASE_URL=https://app.certora.com
-curl -sS "$CERTORA_API_BASE_URL/v2/access" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/access" -H "Authorization: Bearer $CERTORAKEY"
 ```
 
 `key.scopes` must hold `runs:create`, `runs:read`, `runs:cancel`, and `artifacts:read`. If one is absent, name it, tell the user the key has to be created again with that permission, and stop. Do not test `capabilities.run_types`: it is the same fixed list for every key and proves nothing.
@@ -33,7 +33,7 @@ Whether the organization is allowed to run the resolver shows on the create call
 
 ## How the API answers
 
-Every call carries `Authorization: Bearer $CERTORA_API_KEY`. Request and reply bodies are JSON. Every reply carries a `request_id`.
+Every call carries `Authorization: Bearer $CERTORAKEY`. Request and reply bodies are JSON. Every reply carries a `request_id`.
 
 A refused call answers with `application/problem+json`. The body holds `status`, `code`, `detail`, `retryable`, and sometimes `field_errors`. When you report a refusal, quote `code`, `detail`, and `request_id`. A 422 names the bad field in `field_errors`. A 429 carries a `Retry-After` header in seconds. Wait that long, then retry. Read `retryable` as a hint only: `code` decides, and this document names each code that is worth another call. A request body is capped at 256 KiB. A resolver request is far below that.
 
@@ -45,7 +45,7 @@ Start one run per rule. The create call needs an `Idempotency-Key` header of 1 t
 
 ```bash
 curl -sS -X POST "$CERTORA_API_BASE_URL/v2/timeout-resolver-runs" \
-  -H "Authorization: Bearer $CERTORA_API_KEY" \
+  -H "Authorization: Bearer $CERTORAKEY" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: <slug>-<ruleName>-<job>" \
   -d '{
@@ -76,7 +76,7 @@ The run list tells you whether a run exists:
 
 ```bash
 curl -sS "$CERTORA_API_BASE_URL/v2/runs?run_type=timeout_resolver&client_reference=<slug>-<ruleName>-<job>" \
-  -H "Authorization: Bearer $CERTORA_API_KEY"
+  -H "Authorization: Bearer $CERTORAKEY"
 ```
 
 A run in the list is the one to poll. An empty list proves nothing: `client_reference` is written only after a launch returns a run id, so an ambiguous launch leaves it unset while the run exists. An empty list is never permission to create.
@@ -86,7 +86,7 @@ A run in the list is the one to poll. An empty list proves nothing: `client_refe
 A run takes between 30 minutes and a few hours. Poll every 60 seconds, with a progress note on each poll:
 
 ```bash
-curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>" -H "Authorization: Bearer $CERTORAKEY"
 ```
 
 `run.status` is one of `queued`, `running`, `finalizing`, `succeeded`, `failed`, `cancelling`, `cancelled`. Stop polling at `succeeded`, `failed`, or `cancelled`. The other values mean the run is still moving. `run.progress` is null while the run is `queued`. From `running` on, `run.progress.phase` names the current step.
@@ -97,7 +97,7 @@ To stop a run, cancel it:
 
 ```bash
 curl -sS -X POST "$CERTORA_API_BASE_URL/v2/runs/<run_id>/cancel" \
-  -H "Authorization: Bearer $CERTORA_API_KEY" \
+  -H "Authorization: Bearer $CERTORAKEY" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -109,7 +109,7 @@ A `202` means the cancellation was taken, and the run moves through `cancelling`
 Read the result document once the run is `succeeded`. It is not a downloadable artifact, and this route is the only way to read it.
 
 ```bash
-curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/result" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/result" -H "Authorization: Bearer $CERTORAKEY"
 ```
 
 The reply body is `{request_id, result}`. The document is `result.data`. The envelope carries `result.schema_version`, the string `"1"`, beside `result.run_id` and `result.run_type`. The document has a `schema_version` of its own, the integer `1`. Inside `result.data`, rely on `operation`, `status`, `message`, `run`, `products`, `outcome`, `compiler_output`, and `error`. Every one of those keys is always there. An unpublished or unreached value is `null`, and `products.patches` is then `[]`. Decide on the value, never on the presence of the key. Do not depend on anything else.
@@ -127,7 +127,7 @@ Take these from `result.data`:
 Then list the artifacts. Before the run is `succeeded`, the list call answers 409 with code `artifacts_not_ready`.
 
 ```bash
-curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/artifacts" -H "Authorization: Bearer $CERTORA_API_KEY"
+curl -sS "$CERTORA_API_BASE_URL/v2/runs/<run_id>/artifacts" -H "Authorization: Bearer $CERTORAKEY"
 ```
 
 The reply holds `artifacts` and `next_cursor`. Each artifact has `name`, `path`, `category`, `size_bytes`, `last_modified_at`, and `download_url`. A page holds the resolver's public files found in that page of everything the run stored. The run's other objects are private, so a page can hold none of the public files. `next_cursor` is non-null while objects remain. Download what the page holds, then list again with `?cursor=<next_cursor>`, until `next_cursor` is null. Each `download_url` is a presigned link that expires after a short time, so download each page before you list the next one. If a download is refused, list that page again and use the fresh link. Then check what you collected against `products`.

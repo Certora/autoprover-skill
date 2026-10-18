@@ -9,8 +9,8 @@ compatibility: >-
   installs with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
   needed: autosetup
   runs with --skip-llm, and the variable it checks at import takes a placeholder. For the
-  hosted Timeout Resolver that Phase 6 can fall back on, also a CERTORA_API_KEY and network
-  access to app.certora.com.
+  hosted Timeout Resolver that Phase 6 can fall back on, the same key needs the Runs API
+  permissions, and network access to app.certora.com.
 metadata:
   version: "0.1.0"
   author: certora
@@ -102,7 +102,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
   Two machine facts that belong here rather than in Phase 3. solc-select moves its whole store into an active virtualenv, so every `solc-select` command in this flow runs under `env -u VIRTUAL_ENV`. And no directory holding a compiler may contain a space: certoraRun builds the compiler command as one string and splits it on whitespace.
 
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
-- Optional: a Certora API key in `CERTORA_API_KEY` (`references/timeout-resolver.md`). Phase 6 uses it only when a rule times out and the manual fixes are exhausted. Its absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user for a key then.
+- Optional: the key in `CERTORAKEY` also carries the Runs API permissions (`references/timeout-resolver.md`). Phase 6 needs them only when a rule times out and the manual fixes are exhausted. Their absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user for a key that has them.
 
 ## Phase 1 — Design document (optional but valuable)
 

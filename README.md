@@ -40,11 +40,11 @@ coverage gaps. The skill never weakens a spec to make a failing rule pass.
 - Java 19 or newer, 21 recommended. The installer looks for it but does not install it. On
   macOS, `brew install openjdk@21` and follow the PATH hint brew prints. On Debian or Ubuntu,
   install `openjdk-21-jdk`.
-- `CERTORAKEY`, required: your key for the Certora cloud prover.
-- `CERTORA_API_KEY`, optional: the organization API key of the Certora Runs API. Only the
-  hosted Timeout Resolver uses it, for rules that keep timing out. Create it on the
-  organization's API Access page at `app.certora.com` with the scopes "Create runs", "Read
-  runs and results", "Cancel runs" and "Download artifacts".
+- `CERTORAKEY`, required: one organization API key, created on the API Access page at
+  `app.certora.com`. Tick "Use Certora Prover" so it runs the prover. Tick "Create runs",
+  "Read runs and results", "Cancel runs" and "Download artifacts" as well if you want the
+  hosted Timeout Resolver, which Phase 6 falls back on for rules that keep timing out.
+  Permissions cannot be changed after the key is created.
 - An agent with a shell that can keep a command running for up to two hours, and a way to
   read https://docs.certora.com/en/latest/ (a web fetch tool or `curl`).
 
@@ -83,7 +83,6 @@ then restart your agent so it inherits the environment:
 ```sh
 export PATH="$HOME/.local/bin:$PATH"   # example: use the path the installer prints
 export CERTORAKEY=...
-export CERTORA_API_KEY=...             # optional
 ```
 
 ## Run it
