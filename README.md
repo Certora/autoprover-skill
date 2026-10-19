@@ -43,7 +43,7 @@ coverage gaps. The skill never weakens a spec to make a failing rule pass.
 - `CERTORAKEY`, required: one organization API key, created on the API Access page at
   `app.certora.com`. Tick "Use Certora Prover" so it runs the prover. Tick "Create runs",
   "Read runs and results", "Cancel runs" and "Download artifacts" as well if you want the
-  hosted Timeout Resolver, which Phase 6 falls back on for rules that keep timing out.
+  hosted Timeout Resolver, which the skill falls back on for rules that keep timing out.
   Permissions cannot be changed after the key is created.
 - An agent with a shell that can keep a command running for up to two hours, and a way to
   read https://docs.certora.com/en/latest/ (a web fetch tool or `curl`).

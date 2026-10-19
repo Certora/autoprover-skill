@@ -4,13 +4,12 @@ description: End-to-end formal verification of a Solidity contract with the Cert
 license: GPL-3.0-only
 compatibility: >-
   Requires certoraRun (certora-cli) and certora-autosetup on PATH, a CERTORAKEY for the
-  Certora cloud prover, Java 19+, network access to prover.certora.com and
-  docs.certora.com, and the Solidity compilers the target project pins, which Phase 3
-  installs with solc-select, plus forge or node to read the project's build plan. No Anthropic key is
-  needed: autosetup
-  runs with --skip-llm, and the variable it checks at import takes a placeholder. For the
-  hosted Timeout Resolver that Phase 6 can fall back on, the same key needs the Runs API
-  permissions, and network access to app.certora.com.
+  Certora cloud prover, Java 19+, network access to prover.certora.com and docs.certora.com,
+  and the Solidity compilers the target project pins, which the skill installs with
+  solc-select, plus forge or node to read the project's build plan. No Anthropic key is
+  needed: autosetup runs with --skip-llm, and the variable it checks at import takes a
+  placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
+  the Runs API permissions, and network access to app.certora.com.
 metadata:
   version: "0.1.0"
   author: certora
