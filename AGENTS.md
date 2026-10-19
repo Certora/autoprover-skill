@@ -32,37 +32,38 @@ part of running it. Two of its three evals submit real cloud prover jobs and cos
   use your own background facility if you have one. See SKILL.md, "Inputs, artifacts, resume".
 - Some way to read pages under https://docs.certora.com/en/latest/, a web-fetch tool or `curl`
   from the shell. Those docs are the authority on CVL; never answer from memory.
-- Sub-agents, if you have them: Phase 6 runs generator and judge batches in parallel. Without
-  that primitive, run the same two roles one component at a time and keep them separate: the
-  generation pass never accepts its own work, and the judging pass re-reads the spec, the
-  contract and the recorded prover status from disk rather than from memory. A second session
-  is the stronger separation where you can get one.
+- Sub-agents, if you have them: the CVL and prover loop runs generator and judge batches in
+  parallel. Without that primitive, run the same two roles one component at a time and keep
+  them separate: the generation pass never accepts its own work, and the judging pass re-reads
+  the spec, the contract and the recorded prover status from disk rather than from memory. A
+  second session is the stronger separation where you can get one.
 
 ## Environment
 
-Phase 0 checks the machine: `certoraRun`, `certora-autosetup`, `CERTORAKEY`, Java 19 or
-newer, and a compiler manager. It stops with a specific message if one is missing.
+The flow opens by checking the machine: `certoraRun`, `certora-autosetup`, `CERTORAKEY`,
+Java 19 or newer, and a compiler manager. It stops with a specific message if one is missing.
 `./install.sh` installs the toolchain and places the skill; it installs no compiler.
 
 Three things to know before you stop over them:
 
 - `CERTORAKEY` carries one organization API key, for the prover and for the Certora Runs
-  API that Phase 6 drives. A run with no timeout never reaches the Runs API, so a key
-  without its permissions still gets through every other phase.
+  API behind the Timeout Resolver. A run with no timeout never reaches that API, so a key
+  without its permissions still gets through the rest of the flow.
   `references/timeout-resolver.md` lists the permissions the key needs.
 - No Anthropic key is needed. The flow runs `certora-autosetup --skip-llm`, which turns off
   every LLM call autosetup makes. The variable is still read at import and only its
   non-emptiness is checked, never the value, so export a placeholder and move on. Summaries
   are then static only, which weakens the specs built on them; a user with a real key can drop
   `--skip-llm` and pay for the better summaries.
-- Compilers are a per-project question, answered in Phase 3 rather than at install time. Read
-  the project's resolved build plan (`forge compiler resolve --json -vv` for Foundry,
-  autosetup's own extractor for Hardhat) rather than its pragmas, install what it resolves to
-  with `solc-select install`, and reach each version through a directory of aliases named the
-  way autosetup names a compiler in a conf, put in front of PATH for the run alone. Nothing is
-  selected globally. Foundry's per-file assignments reach the conf. For a build system whose
-  per-file assignments autosetup drops, Hardhat among them, Phase 3 stops before autosetup when
-  the plan gives different compilers to different files, and says which files disagree.
+- Compilers are a per-project question, answered while the project's setup is built rather
+  than at install time. Read the project's resolved build plan (`forge compiler resolve
+  --json -vv` for Foundry, autosetup's own extractor for Hardhat) rather than its pragmas,
+  install what it resolves to with `solc-select install`, and reach each version through a
+  directory of aliases named the way autosetup names a compiler in a conf, put in front of
+  PATH for the run alone. Nothing is selected globally. Foundry's per-file assignments reach
+  the conf. For a build system whose per-file assignments autosetup drops, Hardhat among them,
+  the setup stops before autosetup when the plan gives different compilers to different files,
+  and says which files disagree.
 
 ## House rules for this flow
 

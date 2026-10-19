@@ -34,24 +34,13 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
 The report includes suspected bugs and counterexamples, alongside verified properties and
 coverage gaps. The skill never weakens a spec to make a failing rule pass.
 
-## What you provide
+## Prerequisites
 
-- A Foundry or Hardhat project that builds, with `forge` or `node` on PATH.
-- Java 19 or newer, 21 recommended. The installer looks for it but does not install it. On
-  macOS, `brew install openjdk@21` and follow the PATH hint brew prints. On Debian or Ubuntu,
-  install `openjdk-21-jdk`.
+- A Foundry or Hardhat project that builds, with `forge` or `node`.
+- Java 19 or newer.
 - `CERTORAKEY`, required: one organization API key, created on the API Access page at
   `app.certora.com`. Tick "Use Certora Prover" so it runs the prover. Tick "Create runs",
-  "Read runs and results", "Cancel runs" and "Download artifacts" as well if you want the
-  hosted Timeout Resolver, which Phase 6 falls back on for rules that keep timing out.
-  Permissions cannot be changed after the key is created.
-- An agent with a shell that can keep a command running for up to two hours, and a way to
-  read https://docs.certora.com/en/latest/ (a web fetch tool or `curl`).
-
-No Anthropic API key is required.
-
-**Cost.** A verification submits paid jobs to the Certora cloud prover and can take hours. If
-the skill uses the hosted Timeout Resolver, your organization pays for it separately.
+  "Read runs and results", "Cancel runs" and "Download artifacts".
 
 ## Install
 
@@ -60,6 +49,8 @@ git clone https://github.com/Certora/autoprover-skill.git
 cd autoprover-skill
 ./install.sh
 ```
+
+### What is being installed
 
 The installer installs `uv`, then `certora-autosetup` and `certoraRun` from AutoProver, and
 `solc-select`. It links the skill into the skill directory of every agent it finds, and always
@@ -95,10 +86,7 @@ If you have no design document, leave it out. The skill looks for one in the pro
 continues without it. It checks its prerequisites first and stops with a message naming
 anything missing. An interrupted run resumes from what it already wrote.
 
-The skill installs the compiler versions the project's build configuration names. If both
-the project path and your home directory contain a space, it stops: the prover cannot use a
-compiler from such a directory. On Apple silicon, compilers before 0.8.5 need Rosetta 2
-(`softwareupdate --install-rosetta`).
+The skill installs the compiler versions the project's build configuration names.
 
 ## Where to find results
 
@@ -155,8 +143,10 @@ To see the whole plan without changing anything, run `./install.sh </dev/null`.
 - `--autoprover-ref <ref>` builds from a different AutoProver commit.
 - `--yes` answers every prompt.
 
-### Updating AutoProver
+### Updating AutoProver dependency
 
+The skill relies on autosetup, a utility for preparing contracts for optimal formal verification.
+The autosetup utility is part of [AutoProver](https://github.com/Certora/AutoProver).
 The installer uses the AutoProver commit named in `skills/certora-verify/AUTOPROVER_REF`. To
 take a newer one, write its SHA into that file and reinstall the tools:
 
