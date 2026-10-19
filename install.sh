@@ -136,7 +136,7 @@ What it installs:
   the skill        into every agent skill directory found on this machine.
 
 It installs no Solidity compiler. The skill reads the target project's build
-configuration and provisions what that project needs, in Phase 3.
+configuration and provisions what that project needs, while it builds the setup.
 
 Options:
   --skill-only          install only the skill; touch no toolchain
