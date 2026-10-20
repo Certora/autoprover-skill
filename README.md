@@ -52,6 +52,25 @@ cd autoprover-skill
 ./install.sh
 ```
 
+### Claude Code, from the marketplace
+
+Claude Code can take the skill from this repository as a plugin, and then update it with a
+command:
+
+```sh
+claude plugin marketplace add Certora/autoprover-skill
+claude plugin install certora-verify@certora-skills
+claude plugin update certora-verify@certora-skills   # later, for a new version
+```
+
+That installs the skill and nothing else. The prover toolchain is still the installer's job,
+so run it once for the tools alone:
+
+```sh
+git clone https://github.com/Certora/autoprover-skill.git
+./autoprover-skill/install.sh --deps-only
+```
+
 ### What is being installed
 
 The installer asks `uv` to install two things, and tells you the size and asks before it does:
