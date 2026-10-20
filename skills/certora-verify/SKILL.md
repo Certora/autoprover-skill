@@ -11,7 +11,7 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   author: certora
 ---
 
@@ -88,13 +88,13 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
   Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
 - `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make (`setup_prover.py:1526` sets `enable_llm = not skip_llm`, and `setup_summaries.py:2507` gates the calls on it).
 
-  autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key (`certora_autosetup/setup/setup_summaries.py:70-93`); a `.env` in the working directory is loaded instead and then nothing is checked at all. So export a placeholder for the import and move on:
+  autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key (`certora_autosetup/setup/setup_summaries.py:70-93`); a `.env` in the working directory is loaded instead and then nothing is checked at all. Nothing in this flow sends the value anywhere, so set the literal placeholder and move on. Do not read, copy or pass on whatever the user may already have in that variable:
 
   ```bash
-  export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-skip-llm-placeholder}"
+  export ANTHROPIC_API_KEY=skip-llm-placeholder
   ```
 
-  What the default costs: summaries for library and external functions are static only, so the ones that are hard to summarize statically get none, and specs that lean on them are weaker. If the user has a real Anthropic key and wants those summaries, drop `--skip-llm` and say that the run will make LLM calls they pay for. Ask first; never spend their key by default.
+  What the default costs: summaries for library and external functions are static only, so the ones that are hard to summarize statically get none, and specs that lean on them are weaker. Richer summaries need a paid Anthropic key and a run without `--skip-llm`. That is the user's call and their money: tell them the option exists, and leave the key and the flag to them.
 - Java 19+ on PATH (`java -version`). autosetup shells out to the `ASTExtraction.jar` typechecker while resolving summaries and there is no fallback path, so an old or absent JDK fails mid-run rather than at startup.
 - A compiler manager, and a way to read a project's build plan. `solc-select` on PATH (`uv tool install solc-select` when it is not), plus `forge` when the target project has a `foundry.toml`, or `node` when it has a `hardhat.config.*`. No version is named here: which compilers a project needs is a property of that project, so Phase 3 derives it from the project's own build configuration and installs what it resolves to.
 

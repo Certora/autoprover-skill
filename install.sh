@@ -4,8 +4,9 @@
 #
 # Two jobs, each skippable:
 #
-#   1. the toolchain - uv, then one `uv tool install` that brings in
-#                      certora-autosetup and certora-cli together.
+#   1. the toolchain - one `uv tool install` that brings in certora-autosetup
+#                      and certora-cli together. uv itself is a prerequisite:
+#                      this script never downloads a program to run it.
 #   2. the skill     - into the skill directory of each agent found here.
 #
 # It installs no Solidity compiler. Which compilers a project needs is a
@@ -49,10 +50,10 @@ AUTOPROVER_REPO="https://github.com/Certora/AutoProver"
 AI_COMPOSER_PKG='ai-composer[certora-cli]'
 AI_COMPOSER_TOOL="ai-composer"
 CLI_PKG="certora-cli"
-PYTHON_PIN="3.12"                    # the floor the project declares, and what its CI uses
+PYTHON_VERSION="3.12"                    # the floor the project declares, and what its CI uses
 MIN_JAVA_MAJOR=19                    # certora-cli's MIN_JAVA_VERSION
 
-UV_INSTALL_URL="https://astral.sh/uv/install.sh"
+UV_INSTALL_DOCS="https://docs.astral.sh/uv/getting-started/installation/"
 UV_DEFAULT_BIN="$HOME/.local/bin"
 
 # Agents whose skill directories this installer knows how to write, as
@@ -127,8 +128,11 @@ $SELF_NAME - install the certora-verify skill and the toolchain it drives.
 
 Usage: ./$SELF_NAME [options]
 
+Requires uv (https://docs.astral.sh/uv/). This script installs no program it
+downloads: it refuses to run rather than fetch one.
+
 What it installs:
-  the toolchain    uv, then one command that brings in certora-autosetup and
+  the toolchain    one command that brings in certora-autosetup and
                    certora-cli together, both owned by uv:
                      uv tool install --with-executables-from $CLI_PKG \\
                        '$AI_COMPOSER_PKG @ git+$AUTOPROVER_REPO@<ref>'
@@ -257,6 +261,9 @@ adopt_uv() {
   fi
 }
 
+# uv is a prerequisite, not something this script fetches. Installing it means
+# running a program this repository has not seen, which is exactly what a
+# reader of an install script should not have to accept on trust.
 ensure_uv() {
   step "uv"
   if adopt_uv; then
@@ -264,16 +271,9 @@ ensure_uv() {
     return 0
   fi
 
-  say "  uv is missing. Its official installer is a script fetched over https and piped to a shell:"
-  say "      curl -LsSf $UV_INSTALL_URL | env INSTALLER_NO_MODIFY_PATH=1 sh"
-  say "  INSTALLER_NO_MODIFY_PATH=1 keeps it out of your shell startup files; the PATH line is"
-  say "  printed here instead. To avoid piping a script to a shell, install uv your own way"
-  say "  (brew, pipx, your distro) and re-run this script."
-  confirm "  Run the official uv installer now?" || die "uv is required; install it yourself and re-run."
-
-  printf '  + curl -LsSf %s | env INSTALLER_NO_MODIFY_PATH=1 sh\n' "$UV_INSTALL_URL"
-  curl -LsSf "$UV_INSTALL_URL" | env INSTALLER_NO_MODIFY_PATH=1 sh
-  adopt_uv || die "uv ran its installer but is still not at $UV_DEFAULT_BIN."
+  die "uv is required and was not found.
+  Install it: $UV_INSTALL_DOCS
+  Then re-run this script."
 }
 
 # ------------------------------------------------------------- toolchain ----
@@ -288,7 +288,7 @@ install_toolchain() {
 
   bin=$(uv tool dir --bin) || die "\`uv tool dir --bin\` failed; is this uv installation healthy?"
 
-  say "  uv tool install --python $PYTHON_PIN --with-executables-from $CLI_PKG \\"
+  say "  uv tool install --python $PYTHON_VERSION --with-executables-from $CLI_PKG \\"
   say "    '$spec'"
   say "  uv tool install solc-select"
   say ""
@@ -302,7 +302,7 @@ install_toolchain() {
   if ! GIT_CONFIG_COUNT=1 \
        GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
        GIT_CONFIG_VALUE_0='git@github.com:' \
-       run uv tool install --python "$PYTHON_PIN" $force \
+       run uv tool install --python "$PYTHON_VERSION" $force \
          --with-executables-from "$CLI_PKG" "$spec"; then
     if uv tool list 2>/dev/null | grep -q "^$CLI_PKG "; then
       die "uv refused to take command names that a separate $CLI_PKG tool already owns.
