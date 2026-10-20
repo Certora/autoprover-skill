@@ -13,7 +13,7 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
-  <a href="skills/certora-verify/SKILL.md"><img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat" alt="version 0.1.0"></a>
+  <a href="skills/certora-verify/SKILL.md"><img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat" alt="version 0.1.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
@@ -38,6 +38,8 @@ coverage gaps. The skill never weakens a spec to make a failing rule pass.
 
 - A Foundry or Hardhat project that builds, with `forge` or `node`.
 - Java 19 or newer.
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The installer uses it and
+  does not install it: it refuses to run rather than download a program for you.
 - `CERTORAKEY`, required: one organization API key, created on the API Access page at
   `app.certora.com`. Tick "Use Certora Prover" so it runs the prover. Tick "Create runs",
   "Read runs and results", "Cancel runs" and "Download artifacts".
@@ -52,9 +54,11 @@ cd autoprover-skill
 
 ### What is being installed
 
-The installer installs `uv`, then `certora-autosetup` and `certoraRun` from AutoProver, and
-`solc-select`. It links the skill into the skill directory of every agent it finds, and always
-into `~/.agents/skills`:
+The installer asks `uv` to install two things, and tells you the size and asks before it does:
+`certora-autosetup` and `certoraRun`, built from the AutoProver repository at the commit in
+`skills/certora-verify/AUTOPROVER_REF`, and `solc-select` from PyPI. Both belong to `uv`
+afterwards, so `uv tool uninstall` removes them. It then links the skill into the skill
+directory of every agent it finds, and always into `~/.agents/skills`:
 
 | Agent | Skill directory |
 |---|---|
