@@ -10,8 +10,8 @@
 #   2. the skill     - into the skill directory of each agent found here.
 #
 # It installs no Solidity compiler. Which compilers a project needs is a
-# property of that project, not of this machine, so the skill works it out in
-# Phase 3 from the project's own build configuration.
+# property of that project, not of this machine, so the skill works it out
+# from the project's own build configuration while it builds the setup.
 #
 # Nothing here deletes anything. Everything it installs belongs to uv, so
 # `uv tool uninstall` is what removes it; the skill is a symlink or a copy you
@@ -57,7 +57,7 @@ UV_INSTALL_DOCS="https://docs.astral.sh/uv/getting-started/installation/"
 UV_DEFAULT_BIN="$HOME/.local/bin"
 
 # Agents whose skill directories this installer knows how to write, as
-# key|config-home|binary. A row is chosen when its home exists or its binary is
+# agent|config-home|binary. A row is chosen when its home exists or its binary is
 # on PATH. `agents` is the cross-agent convention rather than one product's
 # private config, so it has no binary and is always written.
 AGENT_TABLE="claude|${CLAUDE_CONFIG_DIR:-$HOME/.claude}|claude
@@ -140,7 +140,7 @@ What it installs:
   the skill        into every agent skill directory found on this machine.
 
 It installs no Solidity compiler. The skill reads the target project's build
-configuration and provisions what that project needs, in Phase 3.
+configuration and provisions what that project needs.
 
 Options:
   --skill-only          install only the skill; touch no toolchain
@@ -221,8 +221,8 @@ preflight() {
   local major
   major=$(java_major)
   # A warning, not a failure: this script installs no JVM, and the skill
-  # placement does not need one. Phase 0 of the skill stops a verification run
-  # over a missing Java, which is the only thing it actually breaks.
+  # placement does not need one. The skill's own preflight stops a verification
+  # run over a missing Java, which is the only thing it actually breaks.
   if [ -z "$major" ]; then
     warn "no Java found. certora-autosetup shells out to certora-cli's typechecker jars, so install a JDK $MIN_JAVA_MAJOR or newer before a verification run."
   elif [ "$major" -lt "$MIN_JAVA_MAJOR" ]; then
@@ -297,7 +297,8 @@ install_toolchain() {
 
   # The submodule rewrite is load bearing: AutoProver's graphcore submodule is
   # recorded with an SSH URL and uv initializes submodules while it builds, so
-  # without this the install needs a GitHub SSH key. graphcore itself is public.
+  # without this the build would have to authenticate to GitHub over ssh.
+  # graphcore itself is public, so https needs nothing from the user.
   # It travels in a throwaway config file, not in git's own per-setting
   # environment variables: one of those is named like a secret, which costs a
   # reader and a scanner the same second look for nothing. The file includes
@@ -360,17 +361,17 @@ report_path() {
 # The directories to write, one per line: --dir if given, else every row of
 # AGENT_TABLE whose home exists or whose binary is on PATH.
 skill_targets() {
-  local dir key home binary
+  local dir agent home binary
   if [ "${#SKILL_DIRS[@]}" -gt 0 ]; then
     for dir in "${SKILL_DIRS[@]}"; do printf '%s\n' "$dir"; done
     return 0
   fi
-  while IFS='|' read -r key home binary; do
-    [ -n "$key" ] || continue
+  while IFS='|' read -r agent home binary; do
+    [ -n "$agent" ] || continue
     # The cross-agent directory is written whether or not it exists yet, so the
     # target list is never empty and a machine with no agent still gets the
     # skill somewhere an agent will look.
-    if [ "$key" = "agents" ] || [ -d "$home" ] ||
+    if [ "$agent" = "agents" ] || [ -d "$home" ] ||
        { [ -n "$binary" ] && command -v "$binary" >/dev/null 2>&1; }; then
       printf '%s/skills\n' "$home"
     fi
@@ -396,7 +397,7 @@ EOF
 
   # A symlink means `git pull` in this checkout updates every install. A copy
   # is the right answer when there is nothing to pull from, so the default
-  # keys off whether this is a git checkout at all.
+  # follows whether this is a git checkout at all.
   if [ "$COPY" -eq 1 ]; then
     mode="copy"
   elif git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
@@ -455,8 +456,8 @@ notes() {
   say "  CERTORAKEY authenticates certoraRun against the cloud prover. This script stores no"
   say "  key; export it in your own shell. No Anthropic key is needed: the skill runs autosetup"
   say "  with --skip-llm and exports a placeholder for the check it makes without reading it."
-  say "  Compilers are per project: the skill reads the project's build configuration in"
-  say "  Phase 3 and installs what it resolves to, through solc-select."
+  say "  Compilers are per project: the skill reads the project's build configuration"
+  say "  while it builds the setup, and installs what it resolves to, through solc-select."
 }
 
 summary() {
