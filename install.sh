@@ -298,10 +298,23 @@ install_toolchain() {
   # The submodule rewrite is load bearing: AutoProver's graphcore submodule is
   # recorded with an SSH URL and uv initializes submodules while it builds, so
   # without this the install needs a GitHub SSH key. graphcore itself is public.
+  # It travels in a throwaway config file, not in git's own per-setting
+  # environment variables: one of those is named like a secret, which costs a
+  # reader and a scanner the same second look for nothing. The file includes
+  # whatever global config the user already has, so a proxy or a mirror of
+  # theirs still applies; git ignores an include path that does not exist.
+  local rewrite
+  rewrite=$(mktemp "${TMPDIR:-/tmp}/certora-verify-gitconfig.XXXXXX") ||
+    die "could not write a temporary git config."
+  trap 'test -n "${rewrite:-}" && unlink "$rewrite" 2>/dev/null' EXIT
+  {
+    printf '[include]\n\tpath = %s/.gitconfig\n' "$HOME"
+    printf '[include]\n\tpath = %s/git/config\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+    printf '[url "https://github.com/"]\n\tinsteadOf = git@github.com:\n'
+  } > "$rewrite"
+
   # shellcheck disable=SC2086  # $force is one optional flag, split on purpose
-  if ! GIT_CONFIG_COUNT=1 \
-       GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
-       GIT_CONFIG_VALUE_0='git@github.com:' \
+  if ! GIT_CONFIG_GLOBAL="$rewrite" \
        run uv tool install --python "$PYTHON_VERSION" $force \
          --with-executables-from "$CLI_PKG" "$spec"; then
     if uv tool list 2>/dev/null | grep -q "^$CLI_PKG "; then
