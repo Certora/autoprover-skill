@@ -1,5 +1,5 @@
 {
-  "skill_name": "certora-verify",
+  "skill_name": "certora-autoprover",
   "notes": "Dev-time eval set for skill authoring. Fixtures are described by SHAPE so the set is not tied to any one checkout; the `example_fixture` field points at a copy that existed in the development checkout, but a runner should supply its own equivalent. Each eval runs against a fresh COPY of its fixture (the flow writes certora/ artifacts into the project). Evals 1-2 need CERTORAKEY and the placeholder the flow exports for autosetup's import check, and they submit real cloud prover jobs (autosetup alone runs several) \u2014 expect long wall-clock and real cost. Eval 3 is cheap and offline (fails at preflight).",
   "evals": [
     {

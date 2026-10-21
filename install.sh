@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Installer for the certora-verify agent skill and the toolchain it drives.
+# Installer for the certora-autoprover agent skill and the toolchain it drives.
 #
 # Two jobs, each skippable:
 #
@@ -30,7 +30,7 @@ SELF_NAME=${0##*/}
 # A user CDPATH would make the cd below print, and possibly land, somewhere else.
 unset CDPATH
 REPO_ROOT=$(cd -- "$(dirname -- "$0")" && pwd -P)
-SKILL_NAME="certora-verify"
+SKILL_NAME="certora-autoprover"
 SKILL_SRC="$REPO_ROOT/skills/$SKILL_NAME"
 
 # The AutoProver commit this release of the skill is built against, kept in one
@@ -124,7 +124,7 @@ confirm() {
 
 usage() {
   cat <<EOF
-$SELF_NAME - install the certora-verify skill and the toolchain it drives.
+$SELF_NAME - install the certora-autoprover skill and the toolchain it drives.
 
 Usage: ./$SELF_NAME [options]
 
@@ -305,7 +305,7 @@ install_toolchain() {
   # whatever global config the user already has, so a proxy or a mirror of
   # theirs still applies; git ignores an include path that does not exist.
   local rewrite
-  rewrite=$(mktemp "${TMPDIR:-/tmp}/certora-verify-gitconfig.XXXXXX") ||
+  rewrite=$(mktemp "${TMPDIR:-/tmp}/certora-autoprover-gitconfig.XXXXXX") ||
     die "could not write a temporary git config."
   trap 'test -n "${rewrite:-}" && unlink "$rewrite" 2>/dev/null' EXIT
   {
@@ -473,7 +473,7 @@ summary() {
 
 main() {
   parse_args "$@"
-  say "certora-verify installer $INSTALLER_VERSION"
+  say "certora-autoprover installer $INSTALLER_VERSION"
 
   preflight
   if [ "$DO_TOOLCHAIN" -eq 1 ]; then

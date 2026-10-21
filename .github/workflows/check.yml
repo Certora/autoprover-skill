@@ -44,14 +44,14 @@ jobs:
                    .claude-plugin/plugin.json \
                    .claude-plugin/marketplace.json \
                    .agents/plugins/marketplace.json \
-                   skills/certora-verify/SKILL.md \
-                   skills/certora-verify/AUTOPROVER_REF \
-                   skills/certora-verify/references/autosetup.md \
-                   skills/certora-verify/references/cvl-writing.md \
-                   skills/certora-verify/references/cvl-pitfalls.md \
-                   skills/certora-verify/references/prover-loop.md \
-                   skills/certora-verify/references/timeout-resolver.md \
-                   skills/certora-verify/evals/evals.json; do
+                   skills/certora-autoprover/SKILL.md \
+                   skills/certora-autoprover/AUTOPROVER_REF \
+                   skills/certora-autoprover/references/autosetup.md \
+                   skills/certora-autoprover/references/cvl-writing.md \
+                   skills/certora-autoprover/references/cvl-pitfalls.md \
+                   skills/certora-autoprover/references/prover-loop.md \
+                   skills/certora-autoprover/references/timeout-resolver.md \
+                   skills/certora-autoprover/evals/evals.json; do
             if [ -z "$(git ls-files -- "$f")" ]; then
               echo "::error file=$f::$f is not tracked, so a clone will not have it"
               missing=1
@@ -217,10 +217,10 @@ jobs:
       - name: The AutoProver pin is a file, and nothing duplicates it
         run: |
           set -eu
-          ref=$(tr -d '[:space:]' < skills/certora-verify/AUTOPROVER_REF)
+          ref=$(tr -d '[:space:]' < skills/certora-autoprover/AUTOPROVER_REF)
           case "$ref" in
             [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-            *) echo "::error file=skills/certora-verify/AUTOPROVER_REF::not a 40-character SHA: $ref"; exit 1 ;;
+            *) echo "::error file=skills/certora-autoprover/AUTOPROVER_REF::not a 40-character SHA: $ref"; exit 1 ;;
           esac
           echo "ok  pin is $ref"
           if git ls-files '*.md' | xargs grep -nE '\b[0-9a-f]{40}\b' ; then
@@ -254,7 +254,7 @@ jobs:
       - name: install.sh writes nothing before you agree
         run: |
           set -eu
-          ref=$(tr -d '[:space:]' < skills/certora-verify/AUTOPROVER_REF)
+          ref=$(tr -d '[:space:]' < skills/certora-autoprover/AUTOPROVER_REF)
           fake=$(mktemp -d); before=$(mktemp); after=$(mktemp)
           find "$fake" | sort > "$before"
           if plan=$(env HOME="$fake" ./install.sh </dev/null 2>&1); then
