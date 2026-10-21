@@ -45,12 +45,11 @@ Statuses per rule: `VERIFIED`, `VIOLATED`, `TIMEOUT`, `SANITY_FAILED`, `SKIPPED`
 For per-rule statuses and counterexamples:
 
 1. **Web report** (preferred for a human): the printed `/output/` link → rule tree → call trace.
-2. **Programmatic**: the run's full output is downloadable without login using the anonymousKey from the link:
-   ```bash
-   curl -s "https://prover.certora.com/jobData/<user>/<job>?anonymousKey=<key>" | jq -r .zipOutputUrl
-   curl -sL "<zipOutputUrl>?anonymousKey=<key>" -o out.tar.gz && tar xzf out.tar.gz
-   # append the key with '&' instead of '?' if zipOutputUrl already contains a '?'
-   ```
+2. **Programmatic**: the run's full output is downloadable without login using the anonymousKey from the link. Two steps, by whatever means your agent has:
+
+   - read `https://prover.certora.com/jobData/<user>/<job>?anonymousKey=<key>`, a JSON document whose `zipOutputUrl` field is the archive's address
+   - fetch that address with the same `anonymousKey` on it, and unpack the gzipped tar it returns. Append the key with `&` rather than `?` when `zipOutputUrl` already carries a query
+
    The archive usually extracts to a single top-level directory — descend into it first (`*/Reports/treeView/`). `Reports/treeView/treeViewStatus_<N>.json` (take the highest N) holds the rule tree with statuses; each violated leaf references an output JSON next to it whose `callTrace` is the counterexample. When reading a trace, skip "Setup" / "Global State" / "Evaluate branch condition" / "unknown loop source code" noise nodes.
 
    Shortcut: after a completed run certoraRun already writes the ready-to-use archive URL to `.certora_internal/.zip-output-url.txt`, so you can skip the `jobData` call and go straight to the download. The full archive can be hundreds of MB — you only need it to read a counterexample `callTrace`; for statuses alone the web report or the streamed stdout summary is enough.
