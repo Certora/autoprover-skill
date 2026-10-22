@@ -1,6 +1,6 @@
 <div align="center">
 
-# certora-verify
+# certora-autoprover
 
 **Formally verify a Solidity contract end to end with the Certora Prover.**
 
@@ -13,7 +13,7 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
-  <a href="skills/certora-verify/SKILL.md"><img src="https://img.shields.io/badge/version-0.2.2-blue?style=flat" alt="version 0.1.0"></a>
+  <a href="skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.3.1-blue?style=flat" alt="version 0.1.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
@@ -56,7 +56,7 @@ cd autoprover-skill
 
 The installer asks `uv` to install two things, and tells you the size and asks before it does:
 `certora-autosetup` and `certoraRun`, built from the AutoProver repository at the commit in
-`skills/certora-verify/AUTOPROVER_REF`, and `solc-select` from PyPI. Both belong to `uv`
+`skills/certora-autoprover/AUTOPROVER_REF`, and `solc-select` from PyPI. Both belong to `uv`
 afterwards, so `uv tool uninstall` removes them. It then links the skill into the skill
 directory of every agent it finds, and always into `~/.agents/skills`:
 
@@ -84,7 +84,7 @@ export CERTORAKEY=...
 
 Open your Solidity project in your agent and ask, for example:
 
-> Use certora-verify to verify `src/Vault.sol:Vault`. The design document is `docs/design.md`.
+> Use certora-autoprover to verify `src/Vault.sol:Vault`. The design document is `docs/design.md`.
 
 If you have no design document, leave it out. The skill looks for one in the project and
 continues without it. It checks its prerequisites first and stops with a message naming
@@ -111,10 +111,10 @@ Everything goes under the project's `certora/` directory:
 | `./install.sh` (symlink, the default) | `git pull` in this clone. The agents see the new files at once. |
 | `./install.sh --copy` | `git pull`, then `./install.sh --skill-only --copy`. |
 | `npx skills add` | Run the same `npx skills add` command again. |
-| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-verify` |
+| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
 
 These update the skill, not its tools. If the update changes
-`skills/certora-verify/AUTOPROVER_REF`, also run `./install.sh --deps-only --reinstall`.
+`skills/certora-autoprover/AUTOPROVER_REF`, also run `./install.sh --deps-only --reinstall`.
 
 ## Other ways to install
 
@@ -127,11 +127,11 @@ npx skills add Certora/autoprover-skill
 
 # Claude Code plugin
 claude plugin marketplace add Certora/autoprover-skill
-claude plugin install certora-verify@certora-skills
+claude plugin install certora-autoprover@certora-skills
 ```
 
 For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
-or paste `skills/certora-verify/SKILL.md` into its context. Keep this repository accessible
+or paste `skills/certora-autoprover/SKILL.md` into its context. Keep this repository accessible
 to the agent so it can read the files `SKILL.md` refers to.
 
 ## Advanced
@@ -151,7 +151,7 @@ To see the whole plan without changing anything, run `./install.sh </dev/null`.
 
 The skill relies on autosetup, a utility for preparing contracts for optimal formal verification.
 The autosetup utility is part of [AutoProver](https://github.com/Certora/AutoProver).
-The installer uses the AutoProver commit named in `skills/certora-verify/AUTOPROVER_REF`. To
+The installer uses the AutoProver commit named in `skills/certora-autoprover/AUTOPROVER_REF`. To
 take a newer one, write its SHA into that file and reinstall the tools:
 
 ```sh
@@ -170,7 +170,7 @@ GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
 GIT_CONFIG_VALUE_0='git@github.com:' \
 uv tool install --python 3.12 --with-executables-from certora-cli \
-  "ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@$(cat skills/certora-verify/AUTOPROVER_REF)"
+  "ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@$(cat skills/certora-autoprover/AUTOPROVER_REF)"
 uv tool install solc-select
 ```
 
@@ -182,7 +182,7 @@ If uv answers `Executables already exist`, remove the standalone tool with
 ```sh
 solc-select uninstall <version>             # each compiler, first
 uv tool uninstall ai-composer solc-select   # the tools
-rm ~/.agents/skills/certora-verify          # the skill, in each agent directory it was written to
+rm ~/.agents/skills/certora-autoprover          # the skill, in each agent directory it was written to
 ```
 
 ## License

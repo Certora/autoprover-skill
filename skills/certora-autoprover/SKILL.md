@@ -1,5 +1,5 @@
 ---
-name: certora-verify
+name: certora-autoprover
 description: End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report. Use this whenever the user wants to formally verify a Solidity contract, prove properties about a contract, or generate CVL specs/rules/invariants and check them with the prover — e.g. "formally verify src/Vault.sol:Vault", "come up with properties for this contract and prove them", "write a Certora spec for X and run it". Also use it when the user asks to "audit contract X with the prover" or wants machine-checked guarantees rather than a manual review.
 license: GPL-3.0-only
 compatibility: >-
@@ -11,11 +11,11 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.2.2"
+  version: "0.3.1"
   author: certora
 ---
 
-# certora-verify
+# certora-autoprover
 
 Formally verify a Solidity contract end-to-end: understand the system, set up the prover, decide *what* should be true, express it in CVL, and let the prover check it — iterating on failures until every claim is either proven, exposed as a real bug, or explicitly retired with a reason.
 
