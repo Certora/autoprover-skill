@@ -1,8 +1,8 @@
 # AGENTS.md
 
-This repository is one skill: `certora-verify`, an end-to-end formal-verification flow for
+This repository is one skill: `certora-autoprover`, an end-to-end formal-verification flow for
 Solidity contracts using the Certora Prover. If your agent loads `SKILL.md` files on its own,
-you do not need this file: read `skills/certora-verify/SKILL.md` instead.
+you do not need this file: read `skills/certora-autoprover/SKILL.md` instead.
 
 ## When it applies
 
@@ -13,16 +13,16 @@ contract X with the prover", "write a Certora spec for X and run it".
 
 ## What to read
 
-`skills/certora-verify/SKILL.md` is the flow of record: phases 0-7. Read it in full before
+`skills/certora-autoprover/SKILL.md` is the flow of record: phases 0-7. Read it in full before
 acting. It names five references, each read when its phase needs it:
 
-- `skills/certora-verify/references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
-- `skills/certora-verify/references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
-- `skills/certora-verify/references/cvl-pitfalls.md`, prover traps that are on no single docs page
-- `skills/certora-verify/references/prover-loop.md`, building confs, running `certoraRun`, reading results
-- `skills/certora-verify/references/timeout-resolver.md`, handing a timed-out rule to the hosted Timeout Resolver and applying what it returns
+- `skills/certora-autoprover/references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
+- `skills/certora-autoprover/references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
+- `skills/certora-autoprover/references/cvl-pitfalls.md`, prover traps that are on no single docs page
+- `skills/certora-autoprover/references/prover-loop.md`, building confs, running `certoraRun`, reading results
+- `skills/certora-autoprover/references/timeout-resolver.md`, handing a timed-out rule to the hosted Timeout Resolver and applying what it returns
 
-`skills/certora-verify/evals/evals.json` is a dev-time eval set for working on the skill, not
+`skills/certora-autoprover/evals/evals.json` is a dev-time eval set for working on the skill, not
 part of running it. Two of its three evals submit real cloud prover jobs and cost money.
 
 ## What the flow needs from you

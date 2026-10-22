@@ -5,13 +5,16 @@
     "url": "https://github.com/Certora"
   },
   "description": "Certora agent skills for formal verification of smart contracts.",
+  "renames": {
+    "certora-verify": "certora-autoprover"
+  },
   "plugins": [
     {
-      "name": "certora-verify",
+      "name": "certora-autoprover",
       "source": "./",
-      "displayName": "Certora Verify",
+      "displayName": "Certora AutoProver",
       "description": "End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification \u2014 ending with a verification report.",
-      "version": "0.2.2",
+      "version": "0.3.0",
       "author": {
         "name": "Certora Ltd."
       },
