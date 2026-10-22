@@ -4,7 +4,7 @@
 
 CVL and prover behavior must come from https://docs.certora.com/en/latest/ — never from intuition or half-remembered Solidity semantics (CVL diverges in load-bearing ways: `^` is exponentiation, values are immutable, out-of-bounds reads don't revert...). When unsure about syntax or semantics, retrieve the relevant page below and read the whole section. Ask the docs single, self-contained "what" questions ("What is the syntax for a preserved block?"), locate the section, read it fully. Ignore changelog/"changes since" material.
 
-Retrieve a page with whatever your agent has: a built-in web-fetch or browse tool if there is one, otherwise the shell. The pages are static HTML, so `curl -sL <url> -o page.html` and read the file, or strip the tags for prose (`curl -sL <url> | sed -e 's/<[^>]*>//g'`). If you have neither, say so to the user, work from the bundled references alone, and flag every CVL construct you could not confirm; recollection is not an accepted substitute for the docs.
+Retrieve a page with whatever your agent has: a built-in web-fetch or browse tool if there is one, otherwise the shell. The pages are static HTML, so fetching one to a file and reading it works; strip the tags if the markup gets in the way. If you have neither, say so to the user, work from the bundled references alone, and flag every CVL construct you could not confirm; recollection is not an accepted substitute for the docs.
 
 ### CVL language reference — `https://docs.certora.com/en/latest/docs/cvl/<page>`
 
