@@ -74,9 +74,21 @@ A run in the list is the one to poll. An empty list proves nothing: `client_refe
 
 ## Waiting
 
-A run takes between 30 minutes and a few hours. Poll every 60 seconds, with a progress note on each poll:
+A run takes between 30 minutes and a few hours. Wait for it in the foreground, the same way `prover-loop.md` (*Waiting for a run*) waits for a prover job: one call polls `GET <base>/v2/runs/<run_id>` every 60 seconds, inside a fixed bound.
 
-Read `GET <base>/v2/runs/<run_id>`.
+```bash
+end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, as in prover-loop.md
+while :; do
+  run_status=$(curl -s -H "Authorization: Bearer $CERTORAKEY" <base>/v2/runs/<run_id> \
+    | python3 -c 'import json,sys; print((json.load(sys.stdin).get("run") or {}).get("status", ""))')
+  case "$run_status" in succeeded|failed|cancelled) break ;; esac
+  [ $(( $(date +%s) + 60 )) -lt "$end" ] || break
+  sleep 60
+done
+echo "status=$run_status"
+```
+
+If it prints a status other than `succeeded`, `failed` or `cancelled`, write a one-line progress note (elapsed time and the status) and run the same call again. Repeat until the run reaches one of those three. The bound follows the rule in `prover-loop.md`: 90 seconds fits a 2-minute shell timeout, and a longer bound needs a longer timeout passed on every call. Do not wait through a background monitor, a timer or a turn that ends in the hope of a notice. A sub-agent that started the run never ends its turn while the run is moving.
 
 `run.status` is one of `queued`, `running`, `finalizing`, `succeeded`, `failed`, `cancelling`, `cancelled`. Stop polling at `succeeded`, `failed`, or `cancelled`. The other values mean the run is still moving. `run.progress` is null while the run is `queued`. From `running` on, `run.progress.phase` names the current step.
 

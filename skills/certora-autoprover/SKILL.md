@@ -69,11 +69,13 @@ Then wait with a blocking call that ends after a fixed bound, and repeat that ca
 
 ```bash
 pid=$(cat certora/logs/<name>.pid)
-end=$(( $(date +%s) + 480 ))      # keep this bound under your shell tool's timeout
+end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, see below
 while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 15; done
 if kill -0 "$pid" 2>/dev/null; then echo RUNNING; else echo ENDED; fi
 tail -n 5 certora/logs/<name>.log
 ```
+
+The bound must stay under the timeout of the call that runs the loop. Shell tools often stop a call after 2 minutes by default, and some then move it to the background, which turns the wait into the wake-up wait forbidden below. The bound of 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it (Claude Code: `timeout: 600000` with a bound of 480). If you cannot set the timeout per call, keep 90.
 
 Never block a single command on a whole run, and never re-run one just to see more output. After each call that prints `RUNNING`, **emit a short progress note** (elapsed time + the last log line) and call it again: an agent runtime may cut off a session that goes several minutes without output, so one long silent wait can lose the run even though the detached job is fine.
 
@@ -252,7 +254,7 @@ How you execute those roles depends on what your agent can do:
 
 The loop, the artifacts, the barrier rule for `invariants.spec`, the round cap and the completion gate are identical in both modes; only how each pass is run differs.
 
-**Cloud jobs in parallel mode.** A sub-agent that has submitted a prover job never ends its turn while that job runs: it waits in the foreground loop of `references/prover-loop.md` (*Waiting for a run*) until certoraRun exits, then reads the result. You, the orchestrator, never report a sub-agent as idle or still waiting on the strength of its silence. Check the state of its job on the server first (*Checking a job on the server* in the same reference). If the job has ended, resume the sub-agent and tell it which job ended.
+**Cloud jobs in parallel mode.** A sub-agent that has submitted a prover job or a Timeout Resolver run never ends its turn while that job runs. For a prover job it waits in the foreground loop of `references/prover-loop.md` (*Waiting for a run*) until certoraRun exits. For a resolver run it waits in the foreground loop of `references/timeout-resolver.md` (*Waiting*) until the run reaches `succeeded`, `failed` or `cancelled`. Then it reads the result. You, the orchestrator, never report a sub-agent as idle or still waiting on the strength of its silence. Check the state of its job on the server first: *Checking a job on the server* in `references/prover-loop.md` for a prover job, `GET <base>/v2/runs/<run_id>` for a resolver run. If the job has ended, resume the sub-agent and tell it which job ended.
 
 ### The ping-pong loop
 

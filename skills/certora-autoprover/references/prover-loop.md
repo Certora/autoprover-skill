@@ -38,19 +38,21 @@ Wait for the run in the foreground, with a bounded loop that blocks on the certo
 
 ```bash
 pid=$(cat certora/logs/<slug>_run<N>.pid)
-end=$(( $(date +%s) + 480 ))      # keep this bound under your shell tool's timeout
+end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, see below
 while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 15; done
 if kill -0 "$pid" 2>/dev/null; then echo RUNNING; else echo ENDED; fi
 tail -n 5 certora/logs/<slug>_run<N>.log
 ```
 
-If it prints `RUNNING`, write a one-line progress note (elapsed time and the last log line) and run the same call again. Repeat until it prints `ENDED`. Set the bound a minute or two under the timeout of your shell tool: 480 seconds suits a 10-minute limit, and a 2-minute limit needs about 90.
+If it prints `RUNNING`, write a one-line progress note (elapsed time and the last log line) and run the same call again. Repeat until it prints `ENDED`.
+
+The bound must stay under the timeout of the call that runs the loop. Shell tools often stop a call after 2 minutes by default, and some then move it to the background and promise a notice when it ends. That is the wake-up wait this section forbids. The bound of 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it. Claude Code's shell tool, for example, defaults to 120 seconds and accepts up to `timeout: 600000` (10 minutes) per call, which fits a bound of 480. If you cannot set the timeout per call, keep 90.
 
 Do not wait any other way:
 
 - Do not start a background monitor, a watcher script, a scheduled check or a timer, and do not end your turn and expect a notice to wake you when the job ends. In real runs these wake-ups did not come, monitors expired, and the agent sat idle for hours after its job had finished.
-- **A sub-agent never ends its turn while it owns a running job.** It repeats the wait call until the process ends, reads the result, and only then continues or hands over. A sub-agent that must stop early, for example at a usage limit, says in its last message which job it owns and the job's link.
-- The orchestrator does not take a quiet sub-agent as proof that its job is still running. Before it reports a sub-agent as idle or waiting, it checks the state of that sub-agent's job on the server (*Checking a job on the server* below). If the job has ended, it resumes the sub-agent and tells it which job ended.
+- **A sub-agent never ends its turn while it owns a running job.** A job here is a certoraRun job or a Timeout Resolver run. The sub-agent repeats the wait call until the process ends, or until the resolver run reaches `succeeded`, `failed` or `cancelled` (`timeout-resolver.md`, *Waiting*). It reads the result, and only then continues or hands over. A sub-agent that must stop early, for example at a usage limit, says in its last message which job it owns and the job's link or resolver run id.
+- The orchestrator does not take a quiet sub-agent as proof that its job is still running. Before it reports a sub-agent as idle or waiting, it checks the state of that sub-agent's job on the server: *Checking a job on the server* below for a certoraRun job, `GET <base>/v2/runs/<run_id>` for a resolver run. If the job has ended, it resumes the sub-agent and tells it which job ended.
 
 With `wait_for_results: all` the command submits to the cloud, streams the prover log while waiting, prints the report link, and on completion prints a listing of *failing* rules only (or a bare success message when everything verified). Do not try to parse per-rule verdicts out of stdout — get them from the web report or the rule tree (method 2 below).
 
