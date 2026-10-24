@@ -28,8 +28,9 @@ part of running it. Two of its three evals submit real cloud prover jobs and cos
 ## What the flow needs from you
 
 - A shell and file read/write, plus the ability to leave a command running for up to about 2h
-  while you poll its log. `nohup <cmd> > certora/logs/<name>.log 2>&1 &` with `tail` is enough;
-  use your own background facility if you have one. See SKILL.md, "Inputs, artifacts, resume".
+  while you wait on it. `nohup <cmd> > certora/logs/<name>.log 2>&1 &` starts it, and a bounded
+  foreground loop on its PID waits for it, called again until the process ends. Never wait
+  through a background monitor or a wake-up notice. See SKILL.md, "Inputs, artifacts, resume".
 - Some way to read pages under https://docs.certora.com/en/latest/, a web-fetch tool or `curl`
   from the shell. Those docs are the authority on CVL; never answer from memory.
 - Sub-agents, if you have them: the CVL and prover loop runs generator and judge batches in

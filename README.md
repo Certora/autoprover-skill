@@ -13,7 +13,7 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
-  <a href="skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.3.2-blue?style=flat" alt="version 0.1.0"></a>
+  <a href="skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.4.0-blue?style=flat" alt="version 0.4.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>

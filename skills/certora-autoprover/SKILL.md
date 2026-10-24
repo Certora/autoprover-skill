@@ -11,7 +11,7 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.3.2"
+  version: "0.4.0"
   author: certora
 ---
 
@@ -58,14 +58,26 @@ Every phase writes its result under the project's `certora/` directory, so an in
 
 Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
-Long-running commands (autosetup, and every full certoraRun) take tens of minutes to ~2h, longer than a single foreground command should hold your session. **Start them detached and poll their log.** The portable formulation needs nothing but a shell:
+Long-running commands (autosetup, and every full certoraRun) take tens of minutes or more, longer than a single foreground command should hold your session. **Start them detached, then wait for them in the foreground with a bounded loop.** Starting needs nothing but a shell:
 
 ```bash
 nohup <command> > certora/logs/<name>.log 2>&1 &
 echo $! > certora/logs/<name>.pid
 ```
 
-Read progress with `tail -n 20 certora/logs/<name>.log`, and check liveness with `kill -0 $(cat certora/logs/<name>.pid)` (exit 0 = still running). If your agent has its own background-execution facility, use that instead; it amounts to the same thing, and a log file plus a PID is the fallback when it doesn't. Never block a single command on a whole run, and never re-run one just to see more output. While waiting, **emit a short progress note each time you poll** (elapsed time + the last log line): an agent runtime may cut off a session that goes several minutes without output, so one long silent wait can lose the run even though the detached job is fine.
+Then wait with a blocking call that ends after a fixed bound, and repeat that call until the process ends:
+
+```bash
+pid=$(cat certora/logs/<name>.pid)
+end=$(( $(date +%s) + 480 ))      # keep this bound under your shell tool's timeout
+while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 15; done
+if kill -0 "$pid" 2>/dev/null; then echo RUNNING; else echo ENDED; fi
+tail -n 5 certora/logs/<name>.log
+```
+
+Never block a single command on a whole run, and never re-run one just to see more output. After each call that prints `RUNNING`, **emit a short progress note** (elapsed time + the last log line) and call it again: an agent runtime may cut off a session that goes several minutes without output, so one long silent wait can lose the run even though the detached job is fine.
+
+**Never wait through a background monitor, a watcher script, a timer, or a turn that ends in the hope that a notice wakes you.** In real runs those wake-ups did not come, and finished jobs sat unread for hours. You may start the command with your agent's own background-execution facility, but the wait is always this foreground loop. `references/prover-loop.md` (*Waiting for a run*) has the rules for sub-agents and the orchestrator, and how to read a job's state on the server.
 
 ## Phase 0 — Preflight
 
@@ -201,7 +213,7 @@ nohup certora-autosetup --main-contract <rel_path>:<Main> \
 echo $! > certora/logs/autosetup.pid
 ```
 
-Poll it with `tail -n 20 certora/logs/autosetup.log`, reporting the elapsed time and the last line each time, until the process exits (`kill -0 $(cat certora/logs/autosetup.pid)` fails). `--skip-llm` is the default here, so the summaries are static-only: carry that into the report's confidence notes in Phase 7. Drop the flag only when the user has an Anthropic key and has agreed to the LLM calls it bills for. Below, `<Main>` is the main contract's name. Its deliverables are the foundation for everything after:
+Wait on it with the bounded foreground loop above (`<name>` is `autosetup`), reporting the elapsed time and the last log line after each call, until the loop prints `ENDED`. `--skip-llm` is the default here, so the summaries are static-only: carry that into the report's confidence notes in Phase 7. Drop the flag only when the user has an Anthropic key and has agreed to the LLM calls it bills for. Below, `<Main>` is the main contract's name. Its deliverables are the foundation for everything after:
 
 - `certora/confs/<Main>.conf` — a working prover conf (files, compiler settings, `loop_iter`, hashing bounds). Note: contract *links* are NOT in the conf — they live as a CVL `links` block inside the call-resolution spec below.
 - `certora/specs/summaries/<Main>_base_summaries.spec` AND `certora/specs/summaries/<Main>_call_resolution.spec` — generated summaries plus the links/DISPATCHER resolution. Every spec you write MUST import BOTH (copy the import lines verbatim from the top of `sanity-<Main>.spec`, which also cover `erc7201.spec` when present). Importing only the base summaries silently drops every link, and calls that sanity resolved will havoc in your rules.
@@ -240,6 +252,8 @@ How you execute those roles depends on what your agent can do:
 
 The loop, the artifacts, the barrier rule for `invariants.spec`, the round cap and the completion gate are identical in both modes; only how each pass is run differs.
 
+**Cloud jobs in parallel mode.** A sub-agent that has submitted a prover job never ends its turn while that job runs: it waits in the foreground loop of `references/prover-loop.md` (*Waiting for a run*) until certoraRun exits, then reads the result. You, the orchestrator, never report a sub-agent as idle or still waiting on the strength of its silence. Check the state of its job on the server first (*Checking a job on the server* in the same reference). If the job has ended, resume the sub-agent and tell it which job ended.
+
 ### The ping-pong loop
 
 Keep a set of **open** components (initially all of them). Each round:
@@ -270,16 +284,17 @@ Say plainly to the user that you are in sequential mode, because self-review is 
 Consult the docs pages while authoring — particularly Methods Block/summaries, Invariants, Rules — rather than guessing syntax; `references/cvl-writing.md` maps the pages and gives the retrieval recipe for an agent with no web-fetch tool.
 
 - Give each property its own rule(s)/invariant(s), formalized in the **"VERIFIED = good"** direction from Phase 4.
+- Write the strict property. A rule that permits a loss, a rounding error or any other tolerance must name the source of its bound: the design document, a comment in the code, or the property itself. With no such source, write the strict rule, and if you want to record the tolerance, put it in a separate rule. The judge rejects an unsourced tolerance (criterion 8).
 - Import the setup's summary specs — base summaries AND call resolution, copied verbatim from the sanity spec's import lines (required) — and `invariants.spec` when useful. If you find you need a structural invariant that isn't in `invariants.spec`, do NOT edit that file; record a request and hand it over. The request is applied to `invariants.spec` at the barrier, after all generation for the round and before any judging, never by the generator itself.
 - Build the `property_rules` mapping (every non-skipped property title → the rule/invariant name(s) that verify it) and persist it to `certora/properties/<slug>.property_rules.json` — it gates completion and feeds the report, so it must survive a restart.
 - Typecheck first: `certoraRun <conf> --compilation_steps_only` (fast ~1 min); fix all type/parse errors before anything else (the judge assumes the spec typechecks).
-- Then prove: build the conf as the setup base plus the overlay defined in `references/prover-loop.md` (single source of truth for the overlay; it includes `wait_for_results: "all"`, load-bearing because the base conf ships `wait_for_results: none`). Run certoraRun (mechanics, status parsing, counterexample extraction all in that reference). For each non-verified rule, analyze the trace, classify the root cause, and apply the remediation playbook there: missing-invariant `requireInvariant`, sound summaries for havocs (never `NONDET` on side-effecting functions, never `persistent` ghosts to dodge a havoc), `filtered` blocks at ~95% certainty, expected-failure for a rule that exposes a genuine bug OR that fails only due to an exhausted prover limitation (record which), skip for genuinely-invalid properties, contradictory-`require` hunt for sanity failures.
+- Then prove: start each run detached and wait for it in the foreground loop, never with a background monitor. Aim for every full run to finish in about 15 minutes. When one runs longer, summarize the expensive internals the property does not depend on and split slow rules before the next full run (`references/prover-loop.md`, *Keep each run under about 15 minutes*). Build the conf as the setup base plus the overlay defined in `references/prover-loop.md` (single source of truth for the overlay; it includes `wait_for_results: "all"`, load-bearing because the base conf ships `wait_for_results: none`). Run certoraRun (mechanics, status parsing, counterexample extraction all in that reference). For each non-verified rule, analyze the trace, classify the root cause, and apply the remediation playbook there: missing-invariant `requireInvariant`, sound summaries for havocs (never `NONDET` on side-effecting functions, never `persistent` ghosts to dodge a havoc), `filtered` blocks at ~95% certainty, expected-failure for a rule that exposes a genuine bug OR that fails only due to an exhausted prover limitation (record which), skip for genuinely-invalid properties, contradictory-`require` hunt for sanity failures.
 - A rule that still ends TIMEOUT after the playbook's scope reductions can go to the hosted Timeout Resolver: one call per rule with the run link and the property, as `references/timeout-resolver.md` describes. Download its files, then stop. Do not apply a resolver patch yourself: `source.patch` reaches scene contracts and shared helpers, so a patch applied inside the generation window changes the source underneath a parallel sibling and underneath a component a judge has already accepted. Hand back the resolver result, the downloaded files and the patches you propose, the same way you hand back a structural-invariant request, and let the barrier apply them. A resolver result other than `resolved` leaves the rule a TIMEOUT: read its informal proof for the missing lemma, then continue by hand.
 - Iterate write→prove yourself until the full unfiltered run is clean (all VERIFIED or expected-to-fail) or you've exhausted principled fixes. Write the per-component commentary (`certora/properties/<slug>.commentary.md`). **Hand over** the final spec, `property_rules`, the full prover status (including expected-fail markings + reasons), and any structural-invariant requests, then stop generating and let the judging pass take over; generation never reviews its own work in the same pass.
 
 ### Judge inputs (the judge role)
 
-A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-context review pass in sequential mode. Give it: the spec text, the contract source for the component, the property list, the generator's prover status (so it doesn't flag intended expected-fails — criterion 6), **and both the 8-criteria Judge checklist AND the 23 CVL guidelines from `references/cvl-writing.md`** (criterion 2 checks against those guidelines; criteria 3/6/7 need the source). It produces accept / reject + concrete feedback, on disk before anyone acts on it. A generator may rebut prior feedback on its next round, but only with hard evidence (a typecheck error, a persistent counterexample, a docs citation) — a rebuttal is not a get-out-of-jail-free card.
+A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-context review pass in sequential mode. Give it: the spec text, the contract source for the component, the property list, the design document when there is one (criterion 8 checks the source of every tolerance against it), the generator's prover status (so it doesn't flag intended expected-fails — criterion 6), **and both the 8-criteria Judge checklist AND the 23 CVL guidelines from `references/cvl-writing.md`** (criterion 2 checks against those guidelines; criteria 3/6/7 need the source). It produces accept / reject + concrete feedback, on disk before anyone acts on it. A generator may rebut prior feedback on its next round, but only with hard evidence (a typecheck error, a persistent counterexample, a docs citation) — a rebuttal is not a get-out-of-jail-free card.
 
 ### Per-component round cap / deadlock
 
