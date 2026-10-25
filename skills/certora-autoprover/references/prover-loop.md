@@ -71,14 +71,14 @@ After the verdicts, certoraRun can print `ERROR: Error Status:: 401 ... Server i
 
 ### Checking a job on the server
 
-The job's state is on the Certora API host for the prover host in the link (`data-api.certora.com` for `prover.certora.com`). Read it with the same key the run used, by whatever means your agent has:
+Use the legacy link for this: the one certoraRun printed, or `verification_report_url` in `.vscode_extension_info.json` when it printed an app link. Replace `/output/` with `/jobStatus/` and read the JSON it returns. Its `anonymousKey` is the only credential it needs:
 
 ```bash
-curl -s -H "Authorization: Bearer $CERTORAKEY" \
-  https://data-api.certora.com/v1/domain/jobs/<job> | python3 -c 'import json,sys; print(json.load(sys.stdin).get("job_status"))'
+curl -s "https://prover.certora.com/jobStatus/<user>/<job>?anonymousKey=<key>" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("jobStatus"))'
 ```
 
-`SUCCEEDED` means the job finished and its verdicts are final. `FAILED` and `HALTED` (for example the `global_timeout` limit) mean it ended without a full result. Any other value means it is still queued or running. Never print the key.
+`SUCCEEDED` means the job finished and its verdicts are final. `FAILED` and `HALTED` (for example the `global_timeout` limit) mean it ended without a full result. Any other value means it is still queued or running. If the reply is not JSON or has no `jobStatus`, the check failed: do not read it as "still running". Read the reply and fix the link.
 
 ### Keep each run under about 15 minutes
 
@@ -101,12 +101,12 @@ For per-rule statuses and counterexamples:
 1. **Web report** (preferred for a human): the printed report link → rule tree → call trace.
 2. **Programmatic**: the run's full output is downloadable, by whatever means your agent has. Which way depends on the link certoraRun printed:
 
-   - **App link** (`/orgs/<org>/jobs/<uuid>/report`): send `Authorization: Bearer $CERTORAKEY` to the API host from *Checking a job on the server*. `https://data-api.certora.com/v1/domain/jobs/<job>/tree-view` returns the rule tree with statuses as JSON. `https://data-api.certora.com/v1/domain/jobs/<job>/f/outputs` returns the full archive as a gzipped tar.
+   - **App link** (`/orgs/<org>/jobs/<uuid>/report`): take the legacy link from `.vscode_extension_info.json` and follow the next item.
    - **Legacy link** (`/output/<user>/<job>?anonymousKey=<key>`): no login is needed. Read `https://prover.certora.com/jobData/<user>/<job>?anonymousKey=<key>`, a JSON document whose `zipOutputUrl` field is the archive's address. Fetch that address with the same `anonymousKey` on it, and unpack the gzipped tar it returns. Append the key with `&` rather than `?` when `zipOutputUrl` already carries a query.
 
    The archive usually extracts to a single top-level directory — descend into it first (`*/Reports/treeView/`). `Reports/treeView/treeViewStatus_<N>.json` (take the highest N) holds the rule tree with statuses; each violated leaf references an output JSON next to it whose `callTrace` is the counterexample. When reading a trace, skip "Setup" / "Global State" / "Evaluate branch condition" / "unknown loop source code" noise nodes.
 
-   Shortcut: after a completed run certoraRun already writes the ready-to-use archive URL to `.certora_internal/.zip-output-url.txt`, so you can skip the `jobData` call and go straight to the download. If that URL is on the API host, send the `Authorization` header with it. The full archive can be hundreds of MB — you only need it to read a counterexample `callTrace`; for statuses alone the web report, the `tree-view` JSON or the streamed stdout summary is enough.
+   Shortcut: after a completed run certoraRun already writes the ready-to-use archive URL to `.certora_internal/.zip-output-url.txt`, so you can skip the `jobData` call and go straight to the download. The full archive can be hundreds of MB — you only need it to read a counterexample `callTrace`; for statuses alone the web report, the `tree-view` JSON or the streamed stdout summary is enough.
 3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N), with the same structure.
 
 ## Counterexample analysis (per violated rule)
