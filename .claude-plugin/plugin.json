@@ -1,8 +1,8 @@
 {
-  "name": "certora-verify",
-  "displayName": "Certora Verify",
-  "description": "End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report.",
-  "version": "0.1.0",
+  "name": "certora-autoprover",
+  "displayName": "Certora AutoProver",
+  "description": "End-to-end formal verification of a Solidity contract with the Certora Prover. Given a project (Foundry/Hardhat) and a main contract, this skill analyzes the system's components, runs certora-autosetup to build a working prover configuration and summaries, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them in CVL, and iterates certoraRun until every rule is verified, excused as a suspected bug, or skipped with justification \u2014 ending with a verification report.",
+  "version": "0.4.0",
   "author": {
     "name": "Certora Ltd.",
     "url": "https://www.certora.com"
@@ -10,6 +10,9 @@
   "homepage": "https://github.com/Certora/autoprover-skill",
   "repository": "https://github.com/Certora/autoprover-skill",
   "license": "GPL-3.0-only",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://docs.certora.com/en/latest/",
+  "supportUrl": "https://github.com/Certora/autoprover-skill/issues",
   "keywords": [
     "formal-verification",
     "solidity",

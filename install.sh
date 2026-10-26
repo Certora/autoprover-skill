@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 #
-# Installer for the certora-verify agent skill and the toolchain it drives.
+# Installer for the certora-autoprover agent skill and the toolchain it drives.
 #
 # Two jobs, each skippable:
 #
-#   1. the toolchain - uv, then one `uv tool install` that brings in
-#                      certora-autosetup and certora-cli together.
+#   1. the toolchain - one `uv tool install` that brings in certora-autosetup
+#                      and certora-cli together. uv itself is a prerequisite:
+#                      this script never downloads a program to run it.
 #   2. the skill     - into the skill directory of each agent found here.
 #
 # It installs no Solidity compiler. Which compilers a project needs is a
-# property of that project, not of this machine, so the skill works it out in
-# Phase 3 from the project's own build configuration.
+# property of that project, not of this machine, so the skill works it out
+# from the project's own build configuration while it builds the setup.
 #
 # Nothing here deletes anything. Everything it installs belongs to uv, so
 # `uv tool uninstall` is what removes it; the skill is a symlink or a copy you
@@ -29,7 +30,7 @@ SELF_NAME=${0##*/}
 # A user CDPATH would make the cd below print, and possibly land, somewhere else.
 unset CDPATH
 REPO_ROOT=$(cd -- "$(dirname -- "$0")" && pwd -P)
-SKILL_NAME="certora-verify"
+SKILL_NAME="certora-autoprover"
 SKILL_SRC="$REPO_ROOT/skills/$SKILL_NAME"
 
 # The AutoProver commit this release of the skill is built against, kept in one
@@ -49,14 +50,14 @@ AUTOPROVER_REPO="https://github.com/Certora/AutoProver"
 AI_COMPOSER_PKG='ai-composer[certora-cli]'
 AI_COMPOSER_TOOL="ai-composer"
 CLI_PKG="certora-cli"
-PYTHON_PIN="3.12"                    # the floor the project declares, and what its CI uses
+PYTHON_VERSION="3.12"                    # the floor the project declares, and what its CI uses
 MIN_JAVA_MAJOR=19                    # certora-cli's MIN_JAVA_VERSION
 
-UV_INSTALL_URL="https://astral.sh/uv/install.sh"
+UV_INSTALL_DOCS="https://docs.astral.sh/uv/getting-started/installation/"
 UV_DEFAULT_BIN="$HOME/.local/bin"
 
 # Agents whose skill directories this installer knows how to write, as
-# key|config-home|binary. A row is chosen when its home exists or its binary is
+# agent|config-home|binary. A row is chosen when its home exists or its binary is
 # on PATH. `agents` is the cross-agent convention rather than one product's
 # private config, so it has no binary and is always written.
 AGENT_TABLE="claude|${CLAUDE_CONFIG_DIR:-$HOME/.claude}|claude
@@ -123,12 +124,15 @@ confirm() {
 
 usage() {
   cat <<EOF
-$SELF_NAME - install the certora-verify skill and the toolchain it drives.
+$SELF_NAME - install the certora-autoprover skill and the toolchain it drives.
 
 Usage: ./$SELF_NAME [options]
 
+Requires uv (https://docs.astral.sh/uv/). This script installs no program it
+downloads: it refuses to run rather than fetch one.
+
 What it installs:
-  the toolchain    uv, then one command that brings in certora-autosetup and
+  the toolchain    one command that brings in certora-autosetup and
                    certora-cli together, both owned by uv:
                      uv tool install --with-executables-from $CLI_PKG \\
                        '$AI_COMPOSER_PKG @ git+$AUTOPROVER_REPO@<ref>'
@@ -136,7 +140,7 @@ What it installs:
   the skill        into every agent skill directory found on this machine.
 
 It installs no Solidity compiler. The skill reads the target project's build
-configuration and provisions what that project needs, while it builds the setup.
+configuration and provisions what that project needs.
 
 Options:
   --skill-only          install only the skill; touch no toolchain
@@ -217,8 +221,8 @@ preflight() {
   local major
   major=$(java_major)
   # A warning, not a failure: this script installs no JVM, and the skill
-  # placement does not need one. Phase 0 of the skill stops a verification run
-  # over a missing Java, which is the only thing it actually breaks.
+  # placement does not need one. The skill's own preflight stops a verification
+  # run over a missing Java, which is the only thing it actually breaks.
   if [ -z "$major" ]; then
     warn "no Java found. certora-autosetup shells out to certora-cli's typechecker jars, so install a JDK $MIN_JAVA_MAJOR or newer before a verification run."
   elif [ "$major" -lt "$MIN_JAVA_MAJOR" ]; then
@@ -257,6 +261,9 @@ adopt_uv() {
   fi
 }
 
+# uv is a prerequisite, not something this script fetches. Installing it means
+# running a program this repository has not seen, which is exactly what a
+# reader of an install script should not have to accept on trust.
 ensure_uv() {
   step "uv"
   if adopt_uv; then
@@ -264,16 +271,9 @@ ensure_uv() {
     return 0
   fi
 
-  say "  uv is missing. Its official installer is a script fetched over https and piped to a shell:"
-  say "      curl -LsSf $UV_INSTALL_URL | env INSTALLER_NO_MODIFY_PATH=1 sh"
-  say "  INSTALLER_NO_MODIFY_PATH=1 keeps it out of your shell startup files; the PATH line is"
-  say "  printed here instead. To avoid piping a script to a shell, install uv your own way"
-  say "  (brew, pipx, your distro) and re-run this script."
-  confirm "  Run the official uv installer now?" || die "uv is required; install it yourself and re-run."
-
-  printf '  + curl -LsSf %s | env INSTALLER_NO_MODIFY_PATH=1 sh\n' "$UV_INSTALL_URL"
-  curl -LsSf "$UV_INSTALL_URL" | env INSTALLER_NO_MODIFY_PATH=1 sh
-  adopt_uv || die "uv ran its installer but is still not at $UV_DEFAULT_BIN."
+  die "uv is required and was not found.
+  Install it: $UV_INSTALL_DOCS
+  Then re-run this script."
 }
 
 # ------------------------------------------------------------- toolchain ----
@@ -288,7 +288,7 @@ install_toolchain() {
 
   bin=$(uv tool dir --bin) || die "\`uv tool dir --bin\` failed; is this uv installation healthy?"
 
-  say "  uv tool install --python $PYTHON_PIN --with-executables-from $CLI_PKG \\"
+  say "  uv tool install --python $PYTHON_VERSION --with-executables-from $CLI_PKG \\"
   say "    '$spec'"
   say "  uv tool install solc-select"
   say ""
@@ -297,12 +297,26 @@ install_toolchain() {
 
   # The submodule rewrite is load bearing: AutoProver's graphcore submodule is
   # recorded with an SSH URL and uv initializes submodules while it builds, so
-  # without this the install needs a GitHub SSH key. graphcore itself is public.
+  # without this the build would have to authenticate to GitHub over ssh.
+  # graphcore itself is public, so https needs nothing from the user.
+  # It travels in a throwaway config file, not in git's own per-setting
+  # environment variables: one of those is named like a secret, which costs a
+  # reader and a scanner the same second look for nothing. The file includes
+  # whatever global config the user already has, so a proxy or a mirror of
+  # theirs still applies; git ignores an include path that does not exist.
+  local rewrite
+  rewrite=$(mktemp "${TMPDIR:-/tmp}/certora-autoprover-gitconfig.XXXXXX") ||
+    die "could not write a temporary git config."
+  trap 'test -n "${rewrite:-}" && unlink "$rewrite" 2>/dev/null' EXIT
+  {
+    printf '[include]\n\tpath = %s/.gitconfig\n' "$HOME"
+    printf '[include]\n\tpath = %s/git/config\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+    printf '[url "https://github.com/"]\n\tinsteadOf = git@github.com:\n'
+  } > "$rewrite"
+
   # shellcheck disable=SC2086  # $force is one optional flag, split on purpose
-  if ! GIT_CONFIG_COUNT=1 \
-       GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
-       GIT_CONFIG_VALUE_0='git@github.com:' \
-       run uv tool install --python "$PYTHON_PIN" $force \
+  if ! GIT_CONFIG_GLOBAL="$rewrite" \
+       run uv tool install --python "$PYTHON_VERSION" $force \
          --with-executables-from "$CLI_PKG" "$spec"; then
     if uv tool list 2>/dev/null | grep -q "^$CLI_PKG "; then
       die "uv refused to take command names that a separate $CLI_PKG tool already owns.
@@ -347,17 +361,17 @@ report_path() {
 # The directories to write, one per line: --dir if given, else every row of
 # AGENT_TABLE whose home exists or whose binary is on PATH.
 skill_targets() {
-  local dir key home binary
+  local dir agent home binary
   if [ "${#SKILL_DIRS[@]}" -gt 0 ]; then
     for dir in "${SKILL_DIRS[@]}"; do printf '%s\n' "$dir"; done
     return 0
   fi
-  while IFS='|' read -r key home binary; do
-    [ -n "$key" ] || continue
+  while IFS='|' read -r agent home binary; do
+    [ -n "$agent" ] || continue
     # The cross-agent directory is written whether or not it exists yet, so the
     # target list is never empty and a machine with no agent still gets the
     # skill somewhere an agent will look.
-    if [ "$key" = "agents" ] || [ -d "$home" ] ||
+    if [ "$agent" = "agents" ] || [ -d "$home" ] ||
        { [ -n "$binary" ] && command -v "$binary" >/dev/null 2>&1; }; then
       printf '%s/skills\n' "$home"
     fi
@@ -383,7 +397,7 @@ EOF
 
   # A symlink means `git pull` in this checkout updates every install. A copy
   # is the right answer when there is nothing to pull from, so the default
-  # keys off whether this is a git checkout at all.
+  # follows whether this is a git checkout at all.
   if [ "$COPY" -eq 1 ]; then
     mode="copy"
   elif git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
@@ -442,8 +456,8 @@ notes() {
   say "  CERTORAKEY authenticates certoraRun against the cloud prover. This script stores no"
   say "  key; export it in your own shell. No Anthropic key is needed: the skill runs autosetup"
   say "  with --skip-llm and exports a placeholder for the check it makes without reading it."
-  say "  Compilers are per project: the skill reads the project's build configuration in"
-  say "  Phase 3 and installs what it resolves to, through solc-select."
+  say "  Compilers are per project: the skill reads the project's build configuration"
+  say "  while it builds the setup, and installs what it resolves to, through solc-select."
 }
 
 summary() {
@@ -459,7 +473,7 @@ summary() {
 
 main() {
   parse_args "$@"
-  say "certora-verify installer $INSTALLER_VERSION"
+  say "certora-autoprover installer $INSTALLER_VERSION"
 
   preflight
   if [ "$DO_TOOLCHAIN" -eq 1 ]; then

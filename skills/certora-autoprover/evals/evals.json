@@ -1,11 +1,11 @@
 {
-  "skill_name": "certora-verify",
-  "notes": "Dev-time eval set for skill authoring. Fixtures are described by SHAPE so the set is not tied to any one checkout; the `example_fixture` field points at a copy that existed in the development checkout, but a runner should supply its own equivalent. Each eval runs against a fresh COPY of its fixture (the flow writes certora/ artifacts into the project). Evals 1-2 need CERTORAKEY + ANTHROPIC_API_KEY and submit real cloud prover jobs (autosetup alone runs several) — expect long wall-clock and real cost. Eval 3 is cheap and offline (fails at preflight).",
+  "skill_name": "certora-autoprover",
+  "notes": "Dev-time eval set for skill authoring. Fixtures are described by SHAPE so the set is not tied to any one checkout; the `example_fixture` field points at a copy that existed in the development checkout, but a runner should supply its own equivalent. Each eval runs against a fresh COPY of its fixture (the flow writes certora/ artifacts into the project). Evals 1-2 need CERTORAKEY and the placeholder the flow exports for autosetup's import check, and they submit real cloud prover jobs (autosetup alone runs several) \u2014 expect long wall-clock and real cost. Eval 3 is cheap and offline (fails at preflight).",
   "evals": [
     {
       "id": 1,
       "name": "trivial-end-to-end-answer",
-      "prompt": "Formally verify the Answer contract at src/Answer.sol:Answer in <project> — come up with properties and prove them with the Certora prover.",
+      "prompt": "Formally verify the Answer contract at src/Answer.sol:Answer in <project> \u2014 come up with properties and prove them with the Certora prover.",
       "fixture": "A tiny Foundry project whose src/Answer.sol declares `contract Answer` with a pure function returning a constant (e.g. theAnswer() => 42), optionally with a design.md describing intended behavior. No pre-existing certora/ or emv-*/ artifacts.",
       "example_fixture": "smoketest/ from the development checkout (strip emv-*/ and any certora/ dir from the copy)",
       "expected_output": "Full flow: finds or notes the design doc, writes certora/analysis/application.json, autosetup produces certora/confs/Answer.conf + summaries, an agent-authored per-component spec that imports BOTH Answer_base_summaries.spec AND Answer_call_resolution.spec with at least a rule that theAnswer() returns 42, a clean full certoraRun, and certora/report/report.json + report.md with every property mapped to rules and GOOD outcomes.",
@@ -23,7 +23,7 @@
       "prompt": "Formally verify <project> with the certora prover, main contract src/Counter.sol:Counter. I want real verification results, not just a spec.",
       "fixture": "A tiny Foundry project with a Counter contract that has a KNOWN planted bug: an incrementOther(address other) function documented to credit `other` but whose body actually credits msg.sender. Any comments revealing the bug MUST be removed from the copy. Provide src/ + foundry.toml only (no certora/, no emv-*/).",
       "example_fixture": "the Counter fixture in the development checkout's test scenarios (src/ + foundry.toml; strip the bug-revealing comments in Counter.sol)",
-      "expected_output": "Properties include per-method correctness of incrementOther (the target address is credited). The prover finds the violation (implementation credits msg.sender); the skill marks the rule expected-to-fail with reason 'genuine issue' and reports it as a finding with the counterexample scenario — it does NOT weaken the spec until the rule passes, and does NOT skip the property. A structural invariant tying count to the increments mapping is formulated.",
+      "expected_output": "Properties include per-method correctness of incrementOther (the target address is credited). The prover finds the violation (implementation credits msg.sender); the skill marks the rule expected-to-fail with reason 'genuine issue' and reports it as a finding with the counterexample scenario \u2014 it does NOT weaken the spec until the rule passes, and does NOT skip the property. A structural invariant tying count to the increments mapping is formulated.",
       "assertions": [
         "a property about incrementOther crediting the target address exists in the properties artifact",
         "the corresponding rule outcome is BAD/VIOLATED in report.json and is flagged as an expected failure marked 'genuine issue' (a finding), not silently removed and not marked 'prover limitation'",
@@ -35,10 +35,10 @@
     {
       "id": 3,
       "name": "preflight-fast-fail-interface-target",
-      "prompt": "Please formally verify Intf.sol:Intf in <project> using the certora prover — properties + proofs.",
+      "prompt": "Please formally verify Intf.sol:Intf in <project> using the certora prover \u2014 properties + proofs.",
       "fixture": "A directory whose Intf.sol declares ONLY an interface (e.g. `interface Intf {}`) with no concrete contract of that name.",
       "example_fixture": "examples/trivial/ from the development checkout (Intf.sol contains only `interface Intf`)",
-      "expected_output": "The flow stops at Phase 0 preflight with a clear explanation: the target is an interface (a concrete contract is required; autosetup rejects abstract/interface main contracts) — no fabricated specs, no fake verification claims, and a concrete suggestion (point at a concrete implementation).",
+      "expected_output": "The flow stops at Phase 0 preflight with a clear explanation: the target is an interface (a concrete contract is required; autosetup rejects abstract/interface main contracts) \u2014 no fabricated specs, no fake verification claims, and a concrete suggestion (point at a concrete implementation).",
       "assertions": [
         "no component spec or report.json claiming verification results was produced",
         "the final message explicitly says the target is an interface/abstract and cannot be set up",
