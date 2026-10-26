@@ -34,7 +34,9 @@ echo $! > certora/logs/<slug>_run<N>.pid
 # liveness:  kill -0 $(cat certora/logs/<slug>_run<N>.pid)
 ```
 
-With `wait_for_results: all` the command submits to the cloud, streams the prover log while waiting, prints the report link (`https://prover.certora.com/output/<user>/<job>?anonymousKey=<key>`), and on completion prints a listing of *failing* rules only (or a bare success message when everything verified). Do not try to parse per-rule verdicts out of stdout — get them from the web report or the treeView JSON (method 2 below).
+With `wait_for_results: all` the command submits to the cloud, streams the prover log while waiting, prints the report link (`https://prover.certora.com/orgs/<org>/jobs/<uuid>/report`), and on completion prints a listing of *failing* rules only (or a bare success message when everything verified). Do not try to parse per-rule verdicts out of stdout — get them from the web report or the output archive (method 2 below).
+
+The streamed log prints a `Violated: <rule>-rule_not_vacuous` line for each rule (and each method of a parametric rule). That is the healthy outcome: the vacuity check asserts the rule's path is unreachable, and the violation is the prover finding a path. A vacuous rule is the one whose check is *not* violated, and it is reported as `SANITY_FAILED`.
 
 **Typecheck-only gate:** `certoraRun <conf> --compilation_steps_only` is a fast (~1 min) syntax/type check — run it after every spec edit before paying for a full run (short enough to wait on directly instead of detaching).
 
@@ -44,16 +46,41 @@ Statuses per rule: `VERIFIED`, `VIOLATED`, `TIMEOUT`, `SANITY_FAILED`, `SKIPPED`
 
 For per-rule statuses and counterexamples:
 
-1. **Web report** (preferred for a human): the printed `/output/` link → rule tree → call trace.
-2. **Programmatic**: the run's full output is downloadable without login using the anonymousKey from the link. Two steps, by whatever means your agent has:
+1. **Web report** (preferred for a human): the printed report link → rule tree → call trace.
+2. **Programmatic**: download the run's output archive with `CERTORAKEY`.
 
-   - read `https://prover.certora.com/jobData/<user>/<job>?anonymousKey=<key>`, a JSON document whose `zipOutputUrl` field is the archive's address
-   - fetch that address with the same `anonymousKey` on it, and unpack the gzipped tar it returns. Append the key with `&` rather than `?` when `zipOutputUrl` already carries a query
+   - The job id: certoraRun records every job it submits in `.certora_internal/.certora_recent_jobs.json`, under the project's path, one entry per job with its `job_id` and `notify_msg` (the run's `--msg`). Take the entry for this run. When several runs go in parallel, give each its own `--msg` and match on it.
+   - Fetch and unpack:
 
-   The archive usually extracts to a single top-level directory — descend into it first (`*/Reports/treeView/`). `Reports/treeView/treeViewStatus_<N>.json` (take the highest N) holds the rule tree with statuses; each violated leaf references an output JSON next to it whose `callTrace` is the counterexample. When reading a trace, skip "Setup" / "Global State" / "Evaluate branch condition" / "unknown loop source code" noise nodes.
+     ```bash
+     curl -fsSL -H "Authorization: Bearer $CERTORAKEY" \
+       "https://data-api.certora.com/v1/domain/jobs/<job_id>/f/outputs" -o certora/logs/<slug>_run<N>.tar.gz
+     mkdir -p certora/logs/<slug>_run<N>_out && tar xzf certora/logs/<slug>_run<N>.tar.gz -C certora/logs/<slug>_run<N>_out
+     ```
 
-   Shortcut: after a completed run certoraRun already writes the ready-to-use archive URL to `.certora_internal/.zip-output-url.txt`, so you can skip the `jobData` call and go straight to the download. The full archive can be hundreds of MB — you only need it to read a counterexample `callTrace`; for statuses alone the web report or the streamed stdout summary is enough.
-3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N), with the same structure.
+     The endpoint redirects to a presigned storage URL, and that storage rejects a request carrying the `Authorization` header. `curl -L` drops the header when the redirect changes host. A client that keeps it on redirect, such as Python's `urllib`, gets a 400.
+
+   The archive extracts to a single top-level directory. Read it with the results parser that ships with autosetup, rather than writing your own:
+
+     ```bash
+     "$(uv tool dir)"/ai-composer/bin/python -c '
+     import sys, pathlib
+     from composer.prover.results import read_and_format_run_result
+     results = read_and_format_run_result(pathlib.Path(sys.argv[1]), "evm")
+     if isinstance(results, str): sys.exit(results)
+     for r in results.values():
+         print(r.path.rule, r.path.contract or "", r.path.method or "", r.status, sep="\t")
+         for m in r.error_messages: print("  error:", m)
+         if r.counterexample: print(r.counterexample.render())
+     ' certora/logs/<slug>_run<N>_out/*/
+     ```
+
+     It prints one line per rule, and one per method for a parametric rule or invariant: rule, contract, method, status. Under each violated one it prints the counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped.
+
+     When you need something the parser does not print, read the archive directly. `Reports/treeView/treeViewStatus_<N>.json` (take the highest N) holds the rule tree: each node has `name`, `status`, `errors`, `children` (one per method for a parametric rule) and `output`, a list of `rule_output_<k>.json` file names in the same directory. That file holds `assertMessage`, `jumpToDefinition` and the `callTrace` tree (`message`, `childrenList`). Each `message` is `{text, arguments}`: `text` is a template, and `'{i}'` in it stands for `arguments[i].value`.
+
+   `.certora_internal/<job_id>.zip` is the input bundle certoraRun uploaded, not the output. The full output archive can be hundreds of MB — you only need it to read a counterexample; for statuses alone the web report or the streamed stdout summary is enough.
+3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N); pass the `emv-<N>-certora-<date>/` directory to the parser above.
 
 ## Counterexample analysis (per violated rule)
 
@@ -91,4 +118,4 @@ Keep a per-component commentary file (`certora/properties/<slug>.commentary.md`)
 
 ## Outcome mapping for the report
 
-VERIFIED→GOOD, VIOLATED→BAD, ERROR→ERROR, TIMEOUT→TIMEOUT, anything else→UNKNOWN. Record the `/output/` link per run so verdicts remain auditable.
+VERIFIED→GOOD, VIOLATED→BAD, ERROR→ERROR, TIMEOUT→TIMEOUT, anything else→UNKNOWN. Record the report link per run so verdicts remain auditable.
