@@ -13,7 +13,7 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
-  <a href="skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.4.0-blue?style=flat" alt="version 0.4.0"></a>
+  <a href="skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.5.0-blue?style=flat" alt="version 0.5.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
@@ -38,46 +38,43 @@ coverage gaps. The skill never weakens a spec to make a failing rule pass.
 
 - A Foundry or Hardhat project that builds, with `forge` or `node`.
 - Java 19 or newer.
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The installer uses it and
-  does not install it: it refuses to run rather than download a program for you.
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The skill installs its tools
+  with it. It does not install uv itself.
 - `CERTORAKEY`, required: one organization API key, created on the API Access page at
   `app.certora.com`. Tick "Use Certora Prover" so it runs the prover. Tick "Create runs",
   "Read runs and results", "Cancel runs" and "Download artifacts".
 
-## Install
+Export the key in your shell startup file, and put `~/.local/bin`, where uv places its tools,
+on your PATH. Then restart your agent so it inherits both:
 
 ```sh
-git clone https://github.com/Certora/autoprover-skill.git
-cd autoprover-skill
-./install.sh
+export PATH="$HOME/.local/bin:$PATH"
+export CERTORAKEY=...
 ```
 
-### Claude Code, from the marketplace
+## Install
 
-Claude Code can take the skill from this repository as a plugin, and then update it with a
-command:
+### Claude Code
 
 ```sh
 claude plugin marketplace add Certora/autoprover-skill
-claude plugin install certora-verify@certora-skills
-claude plugin update certora-verify@certora-skills   # later, for a new version
+claude plugin install certora-autoprover@certora-skills
 ```
 
-That installs the skill and nothing else. The prover toolchain is still the installer's job,
-so run it once for the tools alone:
+### Any agent with skill support
+
+```sh
+npx skills add Certora/autoprover-skill
+```
+
+### By hand
+
+Clone this repository and link `skills/certora-autoprover` into your agent's skill directory:
 
 ```sh
 git clone https://github.com/Certora/autoprover-skill.git
-./autoprover-skill/install.sh --deps-only
+ln -s "$PWD/autoprover-skill/skills/certora-autoprover" ~/.claude/skills/certora-autoprover
 ```
-
-### What is being installed
-
-The installer asks `uv` to install two things, and tells you the size and asks before it does:
-`certora-autosetup` and `certoraRun`, built from the AutoProver repository at the commit in
-`skills/certora-autoprover/AUTOPROVER_REF`, and `solc-select` from PyPI. Both belong to `uv`
-afterwards, so `uv tool uninstall` removes them. It then links the skill into the skill
-directory of every agent it finds, and always into `~/.agents/skills`:
 
 | Agent | Skill directory |
 |---|---|
@@ -85,19 +82,24 @@ directory of every agent it finds, and always into `~/.agents/skills`:
 | Cursor | `~/.cursor/skills` |
 | Gemini CLI | `~/.gemini/skills` |
 | opencode | `~/.config/opencode/skills` |
-| Codex | `~/.codex/skills` and `~/.agents/skills` |
+| Codex | `~/.codex/skills` or `~/.agents/skills` |
 | Goose | `~/.config/goose/skills` |
 | anything else | `~/.agents/skills` |
 
-For a project-local directory such as `.claude/skills`, pass `--dir <path>`.
+For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
+or paste `skills/certora-autoprover/SKILL.md` into its context. Keep this repository accessible
+to the agent so it can read the files `SKILL.md` refers to.
 
-Add the PATH line the installer prints to your shell startup file, export your keys there,
-then restart your agent so it inherits the environment:
+### The tools
 
-```sh
-export PATH="$HOME/.local/bin:$PATH"   # example: use the path the installer prints
-export CERTORAKEY=...
-```
+The skill installs its own tools the first time it runs. It says what it will install and asks
+you before it runs anything:
+
+- `certora-autosetup` and `certoraRun`, built with uv from the AutoProver repository at the
+  commit in `skills/certora-autoprover/AUTOPROVER_REF`.
+- `solc-select`, from PyPI, and the compiler versions your project's build configuration names.
+
+The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 
 ## Run it
 
@@ -127,65 +129,31 @@ Everything goes under the project's `certora/` directory:
 
 | How you installed | How to update |
 |---|---|
-| `./install.sh` (symlink, the default) | `git pull` in this clone. The agents see the new files at once. |
-| `./install.sh --copy` | `git pull`, then `./install.sh --skill-only --copy`. |
-| `npx skills add` | Run the same `npx skills add` command again. |
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
+| `npx skills add` | Run the same `npx skills add` command again. |
+| By hand | `git pull` in your clone. A symlinked skill sees the new files at once. |
 
-These update the skill, not its tools. If the update changes
-`skills/certora-autoprover/AUTOPROVER_REF`, also run `./install.sh --deps-only --reinstall`.
+These update the skill. An update can change `skills/certora-autoprover/AUTOPROVER_REF`. Then
+at its next run the skill sees that its tools come from another commit. It asks you before it
+reinstalls them.
 
-## Other ways to install
-
-These routes install the skill only. Install the tools afterwards with
-`./install.sh --deps-only` from a clone of this repository.
-
-```sh
-# skills CLI
-npx skills add Certora/autoprover-skill
-
-# Claude Code plugin
-claude plugin marketplace add Certora/autoprover-skill
-claude plugin install certora-autoprover@certora-skills
-```
-
-For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
-or paste `skills/certora-autoprover/SKILL.md` into its context. Keep this repository accessible
-to the agent so it can read the files `SKILL.md` refers to.
-
-## Advanced
-
-### Installer options
-
-To see the whole plan without changing anything, run `./install.sh </dev/null`.
-
-- `--skill-only` or `--deps-only` installs only the skill or only its tools.
-- `--dir <path>` writes the skill to a directory of your choice.
-- `--copy` copies the skill instead of symlinking it.
-- `--reinstall` re-resolves the tools and lets uv take over command names another tool owns.
-- `--autoprover-ref <ref>` builds from a different AutoProver commit.
-- `--yes` answers every prompt.
-
-### Updating AutoProver dependency
+### Updating the AutoProver dependency
 
 The skill relies on autosetup, a utility for preparing contracts for optimal formal verification.
 The autosetup utility is part of [AutoProver](https://github.com/Certora/AutoProver).
-The installer uses the AutoProver commit named in `skills/certora-autoprover/AUTOPROVER_REF`. To
-take a newer one, write its SHA into that file and reinstall the tools:
+The skill builds its tools from the AutoProver commit named in
+`skills/certora-autoprover/AUTOPROVER_REF`. To take a newer one, write its SHA into that file:
 
 ```sh
 git ls-remote https://github.com/Certora/AutoProver master   # the current master SHA
-./install.sh --deps-only --reinstall
 ```
-
-To try a branch or a commit without editing the file, pass `--autoprover-ref <ref>`.
 
 ### Removing it
 
 ```sh
 solc-select uninstall <version>             # each compiler, first
 uv tool uninstall ai-composer solc-select   # the tools
-rm ~/.agents/skills/certora-autoprover          # the skill, in each agent directory it was written to
+claude plugin uninstall certora-autoprover  # or remove the skill from your agent's skill directory
 ```
 
 ## License
