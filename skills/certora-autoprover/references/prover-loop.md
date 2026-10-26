@@ -24,17 +24,71 @@ Never hand-roll a conf — start from the autosetup base (`certora/confs/<Main>.
 
 ## Running
 
-A full run takes minutes to ~2h (`"global_timeout": 7200` caps it), longer than a single foreground command should hold your session — start it detached, redirect to a log, and poll the log:
+A full run can take up to ~2h (`"global_timeout": 7200` caps it), longer than a single foreground command should hold your session. Aim for far less: see *Keep each run under about 15 minutes* below. Start it detached, with its output in a log and its PID in a file:
 
 ```bash
 cd <project_root>
 nohup certoraRun certora/confs/<slug>.conf > certora/logs/<slug>_run<N>.log 2>&1 &
 echo $! > certora/logs/<slug>_run<N>.pid
-# progress:  tail -n 20 certora/logs/<slug>_run<N>.log
-# liveness:  kill -0 $(cat certora/logs/<slug>_run<N>.pid)
 ```
 
-With `wait_for_results: all` the command submits to the cloud, streams the prover log while waiting, prints the report link (`https://prover.certora.com/output/<user>/<job>?anonymousKey=<key>`), and on completion prints a listing of *failing* rules only (or a bare success message when everything verified). Do not try to parse per-rule verdicts out of stdout — get them from the web report or the treeView JSON (method 2 below).
+### Waiting for a run
+
+Wait for the run in the foreground, with a bounded loop that blocks on the certoraRun process. One call of it:
+
+```bash
+pid=$(cat certora/logs/<slug>_run<N>.pid)
+end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, see below
+while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$end" ]; do sleep 15; done
+if kill -0 "$pid" 2>/dev/null; then echo RUNNING; else echo ENDED; fi
+tail -n 5 certora/logs/<slug>_run<N>.log
+```
+
+If it prints `RUNNING`, write a one-line progress note (elapsed time and the last log line) and run the same call again. Repeat until it prints `ENDED`.
+
+The bound must stay under the timeout of the call that runs the loop. Shell tools often stop a call after 2 minutes by default, and some then move it to the background and promise a notice when it ends. That is the wake-up wait this section forbids. The bound of 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it. Claude Code's shell tool, for example, defaults to 120 seconds and accepts up to `timeout: 600000` (10 minutes) per call, which fits a bound of 480. If you cannot set the timeout per call, keep 90.
+
+Do not wait any other way:
+
+- Do not start a background monitor, a watcher script, a scheduled check or a timer, and do not end your turn and expect a notice to wake you when the job ends. In real runs these wake-ups did not come, monitors expired, and the agent sat idle for hours after its job had finished.
+- **A sub-agent never ends its turn while it owns a running job.** A job here is a certoraRun job or a Timeout Resolver run. The sub-agent repeats the wait call until the process ends, or until the resolver run reaches `succeeded`, `failed` or `cancelled` (`timeout-resolver.md`, *Waiting*). It reads the result, and only then continues or hands over. A sub-agent that must stop early, for example at a usage limit, says in its last message which job it owns and the job's link or resolver run id.
+- The orchestrator does not take a quiet sub-agent as proof that its job is still running. Before it reports a sub-agent as idle or waiting, it checks the state of that sub-agent's job on the server: *Checking a job on the server* below for a certoraRun job, `GET <base>/v2/runs/<run_id>` for a resolver run. If the job has ended, it resumes the sub-agent and tells it which job ended.
+
+With `wait_for_results: all` the command submits to the cloud, streams the prover log while waiting, prints the report link, and on completion prints a listing of *failing* rules only (or a bare success message when everything verified). Do not try to parse per-rule verdicts out of stdout — get them from the web report or the rule tree (method 2 below).
+
+### Report links and job ids
+
+The report link comes in two shapes, depending on the certora-cli version and the key:
+
+- `https://prover.certora.com/output/<user>/<job>?anonymousKey=<key>`: the legacy link. `<job>` is 32 hex characters.
+- `https://<host>/orgs/<org>/jobs/<uuid>/report`: the app link. `<uuid>` is the same job id, written as a UUID with dashes. Remove the dashes to get the 32-character form. This link has no `anonymousKey`, so you read the job through the API with `CERTORAKEY` (method 2 below).
+
+Wherever this skill says `<job>`, take it from whichever shape certoraRun printed. Newer certora-cli versions still write the legacy link, as `verification_report_url` in `.vscode_extension_info.json` inside the run's build directory under `.certora_internal/`. Use it where a step asks for a `prover.certora.com` link.
+
+### When the log ends in an error
+
+After the verdicts, certoraRun can print `ERROR: Error Status:: 401 ... Server is currently unavailable`. That line comes from a last download step after the job, not from the job. The verdicts printed before it are the result of the run. Before you treat any run as failed, check the job's final state on the server.
+
+### Checking a job on the server
+
+Use the legacy link for this: the one certoraRun printed, or `verification_report_url` in `.vscode_extension_info.json` when it printed an app link. Replace `/output/` with `/jobStatus/` and read the JSON it returns. Its `anonymousKey` is the only credential it needs:
+
+```bash
+curl -s "https://prover.certora.com/jobStatus/<user>/<job>?anonymousKey=<key>" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("jobStatus"))'
+```
+
+`SUCCEEDED` means the job finished and its verdicts are final. `FAILED` and `HALTED` (for example the `global_timeout` limit) mean it ended without a full result. Any other value means it is still queued or running. If the reply is not JSON or has no `jobStatus`, the check failed: do not read it as "still running". Read the reply and fix the link.
+
+### Keep each run under about 15 minutes
+
+Each full run should finish in about 15 minutes. A rule that runs for an hour costs the cloud time and also stalls the whole round, because the barrier waits for the slowest component. When a run, or one rule in it, takes clearly longer, fix it before the next full run:
+
+1. **Summarize expensive internals the property does not depend on.** Find what the slow rule spends its time in: heavy math, loops, hashing, deep internal calls. If the property does not depend on how that code computes its result, replace it with a sound summary: a ghost or an uninterpreted function with the facts the rule needs, or `DELETE` for a method the rule never calls. Record each summary and its soundness argument in the commentary. Never summarize the code the property is about.
+2. **Split rules.** Give each case its own rule, or narrow a parametric rule into several rules, each over a group of methods. While you iterate, run only the slow rules with a `rule` filter.
+3. **A timeout that remains** goes to the Timeout Resolver (`timeout-resolver.md`), once the steps above are exhausted.
+
+The completion gate still needs one full unfiltered run.
 
 **Typecheck-only gate:** `certoraRun <conf> --compilation_steps_only` is a fast (~1 min) syntax/type check — run it after every spec edit before paying for a full run (short enough to wait on directly instead of detaching).
 
@@ -44,15 +98,15 @@ Statuses per rule: `VERIFIED`, `VIOLATED`, `TIMEOUT`, `SANITY_FAILED`, `SKIPPED`
 
 For per-rule statuses and counterexamples:
 
-1. **Web report** (preferred for a human): the printed `/output/` link → rule tree → call trace.
-2. **Programmatic**: the run's full output is downloadable without login using the anonymousKey from the link. Two steps, by whatever means your agent has:
+1. **Web report** (preferred for a human): the printed report link → rule tree → call trace.
+2. **Programmatic**: the run's full output is downloadable, by whatever means your agent has. Which way depends on the link certoraRun printed:
 
-   - read `https://prover.certora.com/jobData/<user>/<job>?anonymousKey=<key>`, a JSON document whose `zipOutputUrl` field is the archive's address
-   - fetch that address with the same `anonymousKey` on it, and unpack the gzipped tar it returns. Append the key with `&` rather than `?` when `zipOutputUrl` already carries a query
+   - **App link** (`/orgs/<org>/jobs/<uuid>/report`): take the legacy link from `.vscode_extension_info.json` and follow the next item.
+   - **Legacy link** (`/output/<user>/<job>?anonymousKey=<key>`): no login is needed. Read `https://prover.certora.com/jobData/<user>/<job>?anonymousKey=<key>`, a JSON document whose `zipOutputUrl` field is the archive's address. Fetch that address with the same `anonymousKey` on it, and unpack the gzipped tar it returns. Append the key with `&` rather than `?` when `zipOutputUrl` already carries a query.
 
    The archive usually extracts to a single top-level directory — descend into it first (`*/Reports/treeView/`). `Reports/treeView/treeViewStatus_<N>.json` (take the highest N) holds the rule tree with statuses; each violated leaf references an output JSON next to it whose `callTrace` is the counterexample. When reading a trace, skip "Setup" / "Global State" / "Evaluate branch condition" / "unknown loop source code" noise nodes.
 
-   Shortcut: after a completed run certoraRun already writes the ready-to-use archive URL to `.certora_internal/.zip-output-url.txt`, so you can skip the `jobData` call and go straight to the download. The full archive can be hundreds of MB — you only need it to read a counterexample `callTrace`; for statuses alone the web report or the streamed stdout summary is enough.
+   Shortcut: after a completed run certoraRun already writes the ready-to-use archive URL to `.certora_internal/.zip-output-url.txt`, so you can skip the `jobData` call and go straight to the download. The full archive can be hundreds of MB — you only need it to read a counterexample `callTrace`; for statuses alone the web report, the `tree-view` JSON or the streamed stdout summary is enough.
 3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N), with the same structure.
 
 ## Counterexample analysis (per violated rule)
@@ -70,7 +124,7 @@ Reconstruct the concrete failing scenario from the trace — what state the prov
 | **Parametric rule persistently fails on a method that genuinely shouldn't be covered** | `filtered { f -> ... }` — only at ~95% certainty that exclusion is correct. |
 | **The property itself is wrong** | Skip it with justification (judge must accept); remove its rules. |
 | **SANITY_FAILED** | The assert is unreachable: your `require`s contradict the code's own assumptions, or a non-`@withrevert` call always reverts under your preconditions. Hunt the contradiction; don't paper over it. |
-| **TIMEOUT** | Reduce scope: split the rule, summarize expensive irrelevant methods (`DELETE` for timeout-causing irrelevant ones), check the user-guide timeout page. If that does not resolve it, hand the run and the rule to the hosted Timeout Resolver (`timeout-resolver.md`), which finds the lemmas the proof rests on, encodes them as inert hooks with Lean certificates, and returns patches. |
+| **TIMEOUT** | Reduce scope as in *Keep each run under about 15 minutes*: summarize expensive internals the property does not depend on (`DELETE` for timeout-causing irrelevant methods), split the rule, check the user-guide timeout page. If that does not resolve it, hand the run and the rule to the hosted Timeout Resolver (`timeout-resolver.md`), which finds the lemmas the proof rests on, encodes them as inert hooks with Lean certificates, and returns patches. |
 | **ERROR** | Read the rule's error message in the report; often conf/scene problems (missing file, bad link). |
 
 Anything else: consult the docs and make *principled* changes — never brute-force random edits hoping the prover accepts.
@@ -91,4 +145,4 @@ Keep a per-component commentary file (`certora/properties/<slug>.commentary.md`)
 
 ## Outcome mapping for the report
 
-VERIFIED→GOOD, VIOLATED→BAD, ERROR→ERROR, TIMEOUT→TIMEOUT, anything else→UNKNOWN. Record the `/output/` link per run so verdicts remain auditable.
+VERIFIED→GOOD, VIOLATED→BAD, ERROR→ERROR, TIMEOUT→TIMEOUT, anything else→UNKNOWN. Record the report link per run, in the shape certoraRun printed it, so verdicts remain auditable.

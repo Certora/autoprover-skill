@@ -15,7 +15,7 @@ Do not use it for `VIOLATED`, `SANITY_FAILED`, or `ERROR`. Those have their own 
 
 - The organization API key in the environment variable `CERTORAKEY`, the same key the prover runs on. The user creates it on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. Four permissions matter here: "Create runs", "Read runs and results", "Cancel runs", and "Download artifacts". Permissions cannot be changed after the key is created. A key without "Download artifacts" completes the paid run and then cannot fetch one file. The Runs API also needs a plan that includes it. If the variable is empty, or the key lacks these permissions, stop and ask the user for a key that has them. Never print the key.
 - The API host. Production is `https://app.certora.com`. The dev and staging hosts are for Certora staff. This page writes that host as `<base>`.
-- The run link that `certoraRun` printed, on `prover.certora.com`. Remove the `anonymousKey` part. The service strips it in any case. The run and the key must belong to the same environment. A key from `app.certora.com` resolves runs on `prover.certora.com` and nothing else.
+- The run link that `certoraRun` printed, on `prover.certora.com`. If it printed the app link (`/orgs/<org>/jobs/<uuid>/report`) instead, use the legacy link that certoraRun also wrote. `prover-loop.md` (*Report links and job ids*) says where to find it. Remove the `anonymousKey` part. The service strips it in any case. The run and the key must belong to the same environment. A key from `app.certora.com` resolves runs on `prover.certora.com` and nothing else.
 - The rule name, and the property the rule formalizes: its `title`, `description`, and `sort` from `certora/properties/<slug>.properties.json`. The `rules` list in `certora/properties/<slug>.property_rules.json` maps the property to its rules.
 
 You must own the run, or be a member of the owner's organization with read access to it. The service checks this before it starts anything, and the job reads the run with your identity. An anonymous key grants nothing. In this flow you submitted the run yourself, so this holds.
@@ -74,9 +74,21 @@ A run in the list is the one to poll. An empty list proves nothing: `client_refe
 
 ## Waiting
 
-A run takes between 30 minutes and a few hours. Poll every 60 seconds, with a progress note on each poll:
+A run takes between 30 minutes and a few hours. Wait for it in the foreground, the same way `prover-loop.md` (*Waiting for a run*) waits for a prover job: one call polls `GET <base>/v2/runs/<run_id>` every 60 seconds, inside a fixed bound.
 
-Read `GET <base>/v2/runs/<run_id>`.
+```bash
+end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, as in prover-loop.md
+while :; do
+  run_status=$(curl -s -H "Authorization: Bearer $CERTORAKEY" <base>/v2/runs/<run_id> \
+    | python3 -c 'import json,sys; print((json.load(sys.stdin).get("run") or {}).get("status", ""))')
+  case "$run_status" in succeeded|failed|cancelled) break ;; esac
+  [ $(( $(date +%s) + 60 )) -lt "$end" ] || break
+  sleep 60
+done
+echo "status=$run_status"
+```
+
+If it prints a status other than `succeeded`, `failed` or `cancelled`, write a one-line progress note (elapsed time and the status) and run the same call again. Repeat until the run reaches one of those three. The bound follows the rule in `prover-loop.md`: 90 seconds fits a 2-minute shell timeout, and a longer bound needs a longer timeout passed on every call. Do not wait through a background monitor, a timer or a turn that ends in the hope of a notice. A sub-agent that started the run never ends its turn while the run is moving.
 
 `run.status` is one of `queued`, `running`, `finalizing`, `succeeded`, `failed`, `cancelling`, `cancelled`. Stop polling at `succeeded`, `failed`, or `cancelled`. The other values mean the run is still moving. `run.progress` is null while the run is `queued`. From `running` on, `run.progress.phase` names the current step.
 
