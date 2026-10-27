@@ -43,7 +43,7 @@ part of running it. Two of its three evals submit real cloud prover jobs and cos
 
 The flow opens by checking the machine: `certoraRun`, `certora-autosetup`, `CERTORAKEY`,
 Java 19 or newer, and a compiler manager. It stops with a specific message if one is missing.
-`./install.sh` installs the toolchain and places the skill; it installs no compiler.
+When a tool is missing, it says what it will install and asks before it installs it.
 
 Three things to know before you stop over them:
 

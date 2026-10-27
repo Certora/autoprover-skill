@@ -11,7 +11,7 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   author: certora
 ---
 
@@ -86,7 +86,7 @@ Never block a single command on a whole run, and never re-run one just to see mo
 
 This skill is standalone: it needs nothing beyond the tools below. Fail fast with a specific message rather than improvising around a broken environment:
 
-- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`). `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
+- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`), built from the AutoProver commit this skill pins. If they are missing or stale, you install them as described here. There is no separate installer. `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
 
   The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF`, the file beside this one; read it and substitute it for `<ref>`:
 
@@ -100,7 +100,11 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
   The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key.
 
-  Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. If you cannot install here, stop and give the user those commands, or point them at this repo's `install.sh`, which does all of it. Do not substitute or hand-roll a setup.
+  When the commands are on PATH, also make sure that they come from the pinned ref: `uv tool list --show-version-specifiers` names the git source of `ai-composer`, and the commit in it must be the one in `AUTOPROVER_REF`. A different commit means the skill was updated after the tools were built. Then add `--reinstall` to the command above.
+
+  Before you install or reinstall, tell the user what you will install: `ai-composer` with `certora-cli` from the AutoProver repository at that commit, and later `solc-select` and the project's compilers. Say that uv builds it and that it takes a few minutes. Ask for their go-ahead, and install only after they agree. `uv` itself must already be on PATH. If it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
+
+  Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. uv names the directory where it puts the tools, usually `~/.local/bin`. If that directory is not on PATH, use the full path for this session. Tell the user to add the directory to PATH. If the user declines or the install fails, stop and give the user the commands. Do not substitute or hand-roll a setup.
 - `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make.
 
   autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key; a `.env` in the working directory is loaded instead and then nothing is checked at all. Nothing in this flow sends the value anywhere, so set the literal placeholder and move on. Do not read, copy or pass on whatever the user may already have in that variable:
@@ -111,7 +115,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
   What the default costs: autosetup automatically applies prover-performance summaries only to a fixed curated list of complex library functions. Richer summaries that are specific to particular input protocols need a paid Anthropic key and a run without `--skip-llm`. That is the user's call and their money: tell them the option exists, and leave the key and the flag to them.
 - Java 19+ on PATH (`java -version`). autosetup shells out to the `ASTExtraction.jar` typechecker while resolving summaries and there is no fallback path, so an old or absent JDK fails mid-run rather than at startup.
-- A compiler manager, and a way to read a project's build plan. `solc-select` on PATH (`uv tool install solc-select` when it is not), plus `forge` when the target project has a `foundry.toml`, or `node` when it has a `hardhat.config.*`. No version is named here: which compilers a project needs is a property of that project, so Phase 3 derives it from the project's own build configuration and installs what it resolves to.
+- A compiler manager, and a way to read a project's build plan. `solc-select` on PATH (`uv tool install solc-select` when it is not, after the same go-ahead), plus `forge` when the target project has a `foundry.toml`, or `node` when it has a `hardhat.config.*`. No version is named here: which compilers a project needs is a property of that project, so Phase 3 derives it from the project's own build configuration and installs what it resolves to.
 
   Two machine facts that belong here rather than in Phase 3. solc-select moves its whole store into an active virtualenv, so every `solc-select` command in this flow runs under `env -u VIRTUAL_ENV`. And no directory holding a compiler may contain a space: certoraRun builds the compiler command as one string and splits it on whitespace.
 
