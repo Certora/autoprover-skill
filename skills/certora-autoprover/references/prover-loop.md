@@ -44,7 +44,7 @@ if kill -0 "$pid" 2>/dev/null; then echo RUNNING; else echo ENDED; fi
 tail -n 5 certora/logs/<slug>_run<N>.log
 ```
 
-If it prints `RUNNING`, write a one-line progress note (elapsed time and the last log line) and run the same call again. Repeat until it prints `ENDED`.
+If it prints `RUNNING`, write a one-line progress note (elapsed time and the last log line) and run the same call again. Repeat until it prints `ENDED`. `ENDED` means certoraRun exited, not that the job ended: check the job on the server (*Checking a job on the server* below) before you read results.
 
 The bound must stay under the timeout of the call that runs the loop. Shell tools often stop a call after 2 minutes by default, and some then move it to the background and promise a notice when it ends. That is the wake-up wait this section forbids. The bound of 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it. Claude Code's shell tool, for example, defaults to 120 seconds and accepts up to `timeout: 600000` (10 minutes) per call, which fits a bound of 480. If you cannot set the timeout per call, keep 90.
 
@@ -69,18 +69,17 @@ Wherever this skill says `<job>`, take it from whichever shape certoraRun printe
 
 ### When the log ends in an error
 
-After the verdicts, certoraRun can print `ERROR: Error Status:: 401 ... Server is currently unavailable`. That line comes from a last download step after the job, not from the job. The verdicts printed before it are the result of the run. Before you treat any run as failed, check the job's final state on the server.
+certoraRun streams the job's log from the server. If that stream fails (`ERROR: Error Status:: <code>` and `Server is currently unavailable`), certoraRun stops, prints `Violations were found` and exits with code 1. This can happen at any point, while the job is still queued or running. Neither the message nor the exit code is a verdict. Check the job on the server and wait for `SUCCEEDED` before you read results, and take the verdicts from the results, not from the log.
 
 ### Checking a job on the server
 
-Use the legacy link for this: the one certoraRun printed, or `verification_report_url` in `.vscode_extension_info.json` when it printed an app link. Replace `/output/` with `/jobStatus/` and read the JSON it returns. Its `anonymousKey` is the only credential it needs:
+Ask the data API with `CERTORAKEY`, through the `prover-cli` that ships with autosetup. `<job>` is the job id in either form: the UUID from the app link, or the 32-hex `job_id` in `.certora_internal/.certora_recent_jobs.json`.
 
 ```bash
-curl -s "https://prover.certora.com/jobStatus/<user>/<job>?anonymousKey=<key>" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("jobStatus"))'
+"$(uv tool dir)"/ai-composer/bin/prover-cli --job-id <job> --status-only --format json
 ```
 
-`SUCCEEDED` means the job finished and its verdicts are final. `FAILED` and `HALTED` (for example the `global_timeout` limit) mean it ended without a full result. Any other value means it is still queued or running. If the reply is not JSON or has no `jobStatus`, the check failed: do not read it as "still running". Read the reply and fix the link.
+`SUCCEEDED` means the job finished and its verdicts are final. `FAILED` and `HALTED` (for example the `global_timeout` limit) mean it ended without a full result. Any other status means it is still queued or running. If the command fails, the check failed: do not read it as "still running". `--full-report --format text` also prints the verdict counts.
 
 ### Keep each run under about 15 minutes
 
@@ -111,6 +110,8 @@ For per-rule statuses and counterexamples:
        "https://data-api.certora.com/v1/domain/jobs/<job_id>/f/outputs" -o certora/logs/<slug>_run<N>.tar.gz
      mkdir -p certora/logs/<slug>_run<N>_out && tar xzf certora/logs/<slug>_run<N>.tar.gz -C certora/logs/<slug>_run<N>_out
      ```
+
+     The archive exists only once the job has ended. A 404 means it is not ready yet: check the job on the server (above) and wait for `SUCCEEDED`.
 
      The endpoint redirects to a presigned storage URL, and that storage rejects a request carrying the `Authorization` header. `curl -L` drops the header when the redirect changes host. A client that keeps it on redirect, such as Python's `urllib`, gets a 400.
 

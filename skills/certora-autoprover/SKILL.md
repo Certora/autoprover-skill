@@ -4,9 +4,10 @@ description: End-to-end formal verification of a Solidity contract with the Cert
 license: GPL-3.0-only
 compatibility: >-
   Requires certoraRun (certora-cli) and certora-autosetup on PATH, a CERTORAKEY for the
-  Certora cloud prover, Java 19+, network access to prover.certora.com and docs.certora.com,
-  and the Solidity compilers the target project pins, which the skill installs with
-  solc-select, plus forge or node to read the project's build plan. No Anthropic key is
+  Certora cloud prover, Java 19+, network access to prover.certora.com, app.certora.com,
+  data-api.certora.com and docs.certora.com, and the Solidity compilers the target project
+  pins, which the skill installs with solc-select, plus forge or node to read the project's
+  build plan. No Anthropic key is
   needed: autosetup runs with --skip-llm, and the variable it checks at import takes a
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
@@ -79,6 +80,8 @@ tail -n 5 certora/logs/<name>.log
 The bound must stay under the timeout of the call that runs the loop. Shell tools often stop a call after 2 minutes by default, and some then move it to the background, which turns the wait into the wake-up wait forbidden below. The bound of 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it (Claude Code: `timeout: 600000` with a bound of 480). If you cannot set the timeout per call, keep 90.
 
 Never block a single command on a whole run, and never re-run one just to see more output. After each call that prints `RUNNING`, **emit a short progress note** (elapsed time + the last log line) and call it again: an agent runtime may cut off a session that goes several minutes without output, so one long silent wait can lose the run even though the detached job is fine.
+
+`ENDED` means certoraRun exited, not that the job ended: check the job on the server (`references/prover-loop.md`, *Checking a job on the server*) before you read results.
 
 **Never wait through a background monitor, a watcher script, a timer, or a turn that ends in the hope that a notice wakes you.** In real runs those wake-ups did not come, and finished jobs sat unread for hours. You may start the command with your agent's own background-execution facility, but the wait is always this foreground loop. `references/prover-loop.md` (*Waiting for a run*) has the rules for sub-agents and the orchestrator, and how to read a job's state on the server.
 
@@ -326,7 +329,7 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Per property: title, sort, description, component, the rules that formalize it, and each rule's outcome mapped to GOOD (verified) / BAD (violated) / ERROR / TIMEOUT / UNKNOWN, plus the prover run link.
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
-- Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only). List every line added to the user's sources, from `certora/analysis/source_edits.json`.
+- Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only). List every line added to the user's sources, from `certora/analysis/source_edits.json`, and the lines autosetup added to `.gitignore` and `.gitattributes` (see `git diff`).
 - Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.
