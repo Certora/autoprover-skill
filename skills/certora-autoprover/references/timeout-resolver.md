@@ -80,7 +80,7 @@ A run takes between 30 minutes and a few hours. Wait for it in the foreground, t
 end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, as in prover-loop.md
 while :; do
   run_status=$(curl -s -H "Authorization: Bearer $CERTORAKEY" <base>/v2/runs/<run_id> \
-    | python3 -c 'import json,sys; print((json.load(sys.stdin).get("run") or {}).get("status", ""))')
+    | "$(uv tool dir)"/ai-composer/bin/python -c 'import json,sys; print((json.load(sys.stdin).get("run") or {}).get("status", ""))')
   case "$run_status" in succeeded|failed|cancelled) break ;; esac
   [ $(( $(date +%s) + 60 )) -lt "$end" ] || break
   sleep 60
