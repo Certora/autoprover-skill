@@ -46,10 +46,15 @@ optionally at a design document:
 
 With formal verification you state what must always hold, not how it could break. Take
 solvency: *the vault always holds enough assets to pay out every depositor.* You don't list
-attack paths. The prover searches every input, every caller and every reachable state for a
+attack paths. The Prover searches every input, every caller and every reachable state for a
 sequence of calls that breaks the property, and either finds one or proves that none exists.
 
-**Are you a developer?** autoprover helps you:
+Autoprover relieves you of writing the properties formally yourself. 
+You write the properties in natural language, and Autoprover handles the technicalities,
+the edge cases, the configuration, and the iterative process, until your properties are either 
+proven or a bug is found.
+
+**Are you a developer?** Autoprover helps you:
 - **Think in properties.** It spells out what your protocol must and must not do, not how it is
   implemented.
 - **Catch subtle design bugs** that testing rarely reaches, before you reach an auditor.
@@ -57,13 +62,13 @@ sequence of calls that breaks the property, and either finds one or proves that 
   change with [certora-run-action](https://github.com/Certora/certora-run-action) against the
   same high-level properties.
 
-**Are you a security researcher?** autoprover helps you:
-- **Get oriented fast.** On a new codebase you get its components and the properties each one
+**Are you a security researcher?** Autoprover helps you:
+- **Get oriented fast.** On a new codebase you get its components and the properties each component
   should satisfy.
-- **Start from concrete leads.** Every property the prover breaks comes with the exact call
+- **Start from concrete leads.** Every property the Prover breaks comes with the exact call
   sequence that breaks it.
-- **Check your own attack vectors.** The prover setup is done, so you can write a rule for a
-  suspected issue and let the prover search for an execution that confirms it.
+- **Check your own attack vectors.** Use Autoprover to write a rule for a
+  suspected issue and let the Prover search for an execution that confirms it.
 
 ## How it works
 
