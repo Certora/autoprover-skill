@@ -41,6 +41,7 @@ jobs:
                    skills/certora-autoprover/SKILL.md \
                    skills/certora-autoprover/AUTOPROVER_REF \
                    skills/certora-autoprover/references/autosetup.md \
+                   skills/certora-autoprover/references/property-classes.md \
                    skills/certora-autoprover/references/cvl-writing.md \
                    skills/certora-autoprover/references/cvl-pitfalls.md \
                    skills/certora-autoprover/references/prover-loop.md \

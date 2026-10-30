@@ -12,7 +12,7 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   author: certora
 ---
 
@@ -247,6 +247,10 @@ For each component of the main contract, formulate **security properties** as an
 2. **safety_property** — a concrete statement about what must (not) be possible, *including intended normal behavior*. Good: "a user without the admin role cannot approve other admins"; "a depositor receives the appropriate amount of LP tokens". Bad: "users can't hack the protocol".
 3. **attack_vector** — a *plausible* exploit hypothesis; no evidence of an actual bug required, only plausibility. Good: "a rounding discrepancy between swap and previewSwap could create arbitrage". Bad: "there could be a rounding error and that would be bad somehow".
 
+A safety_property can also state that something must be **possible**. "A holder with a sufficient balance can always exit" and "no participant can make another participant's withdrawal revert" are safety properties. They are worth stating because every property of the form "if the call succeeds, the effects are correct" says nothing about a call that never succeeds.
+
+**Work `references/property-classes.md` before you draft.** It holds the questions to ask of any component: who absorbs a change in value over time, what going first is worth, which way each division rounds, what must not be blocked and who can block it, who the attacker is allowed to be, and the rest. Naming a failure mode is not the same as asking a question. That is why a component ends up with twenty properties about one surface and none about the other. For each class, record the property it produced, or one line on why this component does not expose that surface. The record goes in the round's reasoning, and Phase 7 reads it for the coverage section.
+
 Hard rules: derive from first principles — what the code SHOULD do, not what it currently does. Quality over quantity: no padding, no reframed duplicates, no trivial corollaries, no properties whose violation has no consequence. Exclude what the prover can't or shouldn't check: off-chain events (key compromise, phishing), hash-collision reasoning, event emission, and anything already guaranteed by the type system (overflow reverts in Solidity ≥0.8 are uninteresting).
 
 **Formalization direction is the same for all three sorts, and it is load-bearing:** every rule/invariant must be written so that VERIFIED means "the good thing holds / the bad thing cannot happen." An attack_vector is formalized as *the attack cannot occur*, not as *the attack occurs* — so a green result testifies to the **absence** of the problem, never its presence. If you catch yourself writing a rule that passes exactly when the exploit succeeds, invert it. (This is what makes a VIOLATED result meaningful in Phase 7 — see the expected-failure handling in `references/prover-loop.md`.)
@@ -329,7 +333,7 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Per property: title, sort, description, component, the rules that formalize it, and each rule's outcome mapped to GOOD (verified) / BAD (violated) / ERROR / TIMEOUT / UNKNOWN, plus the prover run link.
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked (Phase 6 recorded this): a rule marked expected-to-fail because it exposed a genuine issue is a **finding** — describe the counterexample scenario and its impact for a human security reviewer; a rule marked expected-to-fail only because of a prover limitation (spurious counterexample after exhausted reformulations) is NOT a bug — list it separately as a coverage gap so nobody chases a nonexistent vulnerability.
-- Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only). List every line added to the user's sources, from `certora/analysis/source_edits.json`, and the lines autosetup added to `.gitignore` and `.gitattributes` (see `git diff`).
+- Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only). Name the property classes from `references/property-classes.md` that produced no property for any component, with the one-line reason Phase 4 recorded for each. A reader needs to know which questions were asked and came back empty, and which were never asked. List every line added to the user's sources, from `certora/analysis/source_edits.json`, and the lines autosetup added to `.gitignore` and `.gitattributes` (see `git diff`).
 - Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover runs.

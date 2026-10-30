@@ -14,9 +14,10 @@ contract X with the prover", "write a Certora spec for X and run it".
 ## What to read
 
 `skills/certora-autoprover/SKILL.md` is the flow of record: phases 0-7. Read it in full before
-acting. It names five references, each read when its phase needs it:
+acting. It names six references, each read when its phase needs it:
 
 - `skills/certora-autoprover/references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
+- `skills/certora-autoprover/references/property-classes.md`, the questions to work through before drafting properties
 - `skills/certora-autoprover/references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
 - `skills/certora-autoprover/references/cvl-pitfalls.md`, prover traps that are on no single docs page
 - `skills/certora-autoprover/references/prover-loop.md`, building confs, running `certoraRun`, reading results
