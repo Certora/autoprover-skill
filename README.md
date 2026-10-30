@@ -2,14 +2,14 @@
 
 # certora-autoprover
 
-**Formally verify a Solidity contract end to end with the Certora Prover.**
+**Formal verification of your Solidity contract, without weeks of specialist work.**
 
-An agent skill that takes a Foundry or Hardhat project and one main contract, models the
-system, builds a working prover setup with
-[certora-autosetup](https://github.com/Certora/AutoProver), formulates security properties,
-writes them as [CVL](https://docs.certora.com/en/latest/) rules and invariants, and runs
-[`certoraRun`](https://docs.certora.com/en/latest/) until every rule is verified, flagged as
-a suspected bug, or reported as unresolved or skipped, with a reason.
+An agent skill that derives your contract's security properties, writes them as
+[CVL](https://docs.certora.com/en/latest/) rules and invariants, and proves them with the
+[Certora Prover](https://docs.certora.com/en/latest/) for every input and every reachable
+state, not just the cases a test or fuzzer tries. Each property comes back verified, flagged as a
+suspected bug with a concrete counterexample, or reported as unresolved or skipped, with a
+reason. No CVL expertise needed.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
@@ -21,140 +21,99 @@ a suspected bug, or reported as unresolved or skipped, with a reason.
 
 </div>
 
-## What it does
+## Quick start
 
-1. Analyzes the project: its components, their entry points and state, and the contracts the
-   prover must model. A design document helps but is optional.
-2. Builds a working prover setup with `certora-autosetup`.
-3. Writes security properties for each component and formalizes them in CVL.
-4. Verifies them with the cloud prover, reviewing the specs and investigating failures,
-   recording verified properties, suspected bugs, and unresolved cases.
-5. Writes a report.
-
-The report includes suspected bugs and counterexamples, alongside verified properties and
-coverage gaps. The skill never weakens a spec to make a failing rule pass.
-
-## Prerequisites
-
-- A Foundry or Hardhat project that builds, with `forge` or `node`.
-- Java 19 or newer.
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The skill installs its tools
-  with it. It does not install uv itself.
-- `CERTORAKEY`, required: one organization API key, created on the API Access page at
-  `app.certora.com`. Tick "Use Certora Prover" so it runs the prover. Tick "Create runs",
+- A Foundry or Hardhat project that builds, with `forge` or `node`, Java 19 or newer, and
+  [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- A `CERTORAKEY`: if you don't have one yet, create it at
+  [app.certora.com](https://app.certora.com), and tick "Use Certora Prover", "Create runs",
   "Read runs and results", "Cancel runs" and "Download artifacts".
 
-Export the key in your shell startup file, and put `~/.local/bin`, where uv places its tools,
-on your PATH. Then restart your agent so it inherits both:
-
 ```sh
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"   # uv places its tools here
 export CERTORAKEY=...
-```
-
-## Install
-
-### Claude Code
-
-```sh
 claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills
 ```
 
-### Any agent with skill support
-
-```sh
-npx skills add Certora/autoprover-skill
-```
-
-### By hand
-
-Clone this repository and link `skills/certora-autoprover` into your agent's skill directory:
-
-```sh
-git clone https://github.com/Certora/autoprover-skill.git
-ln -s "$PWD/autoprover-skill/skills/certora-autoprover" ~/.claude/skills/certora-autoprover
-```
-
-| Agent | Skill directory |
-|---|---|
-| Claude Code | `~/.claude/skills` |
-| Cursor | `~/.cursor/skills` |
-| Gemini CLI | `~/.gemini/skills` |
-| opencode | `~/.config/opencode/skills` |
-| Codex | `~/.codex/skills` or `~/.agents/skills` |
-| Goose | `~/.config/goose/skills` |
-| anything else | `~/.agents/skills` |
-
-For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
-or paste `skills/certora-autoprover/SKILL.md` into its context. Keep this repository accessible
-to the agent so it can read the files `SKILL.md` refers to.
-
-### The tools
-
-The skill installs its own tools the first time it runs. It says what it will install and asks
-you before it runs anything:
-
-- `certora-autosetup` and `certoraRun`, built with uv from the AutoProver repository at the
-  commit in `skills/certora-autoprover/AUTOPROVER_REF`.
-- `solc-select`, from PyPI, and the compiler versions your project's build configuration names.
-
-The tools belong to uv afterwards, so `uv tool uninstall` removes them.
-
-## Run it
-
-Open your Solidity project in your agent and ask, for example:
+Add the two exports to your shell startup file and (re)start your agent; for other agents,
+updating and removing, see [INSTALL.md](INSTALL.md). Then point your agent at your project, and
+optionally at a design document:
 
 > Use certora-autoprover to verify `src/Vault.sol:Vault`. The design document is `docs/design.md`.
 
-If you have no design document, leave it out. The skill looks for one in the project and
-continues without it. It checks its prerequisites first and stops with a message naming
-anything missing. An interrupted run resumes from what it already wrote.
+## Why formal verification
 
-The skill installs the compiler versions the project's build configuration names.
+With formal verification you state what must always hold, not how it could break. Take
+solvency: *the vault always holds enough assets to pay out every depositor.* You don't list
+attack paths. The Prover searches every input, every caller and every reachable state for a
+sequence of calls that breaks the property, and either finds one or proves that none exists.
 
-## Where to find results
+Autoprover relieves you of writing the properties formally yourself. 
+You write the properties in natural language, and Autoprover handles the technicalities,
+the edge cases, the configuration, and the iterative process, until your properties are either 
+proven or a bug is found.
 
-Everything goes under the project's `certora/` directory:
+**Are you a developer?** Autoprover helps you:
+- **Think in properties.** It spells out what your protocol must and must not do, not how it is
+  implemented.
+- **Catch subtle design bugs** that testing rarely reaches, before you reach an auditor.
+- **Keep them caught.** Add the generated specs to your CI and automatically check each code
+  change with [certora-run-action](https://github.com/Certora/certora-run-action) against the
+  same high-level properties.
 
-| Path | What it holds |
-|---|---|
-| `certora/report/report.md` | The report: per property outcomes, suspected bugs, skips with reasons, coverage. `report.json` holds the same data. |
-| `certora/specs/` | The CVL specs and the generated summaries. |
-| `certora/confs/` | The prover configurations, one per component. |
-| `certora/logs/` | The log of every autosetup and prover run. |
-| `certora/resolver/<rule>/` | If the skill used the Timeout Resolver, its proof, patches and Lean file. |
+**Are you a security researcher?** Autoprover helps you:
+- **Get oriented fast.** On a new codebase you get its components and the properties each component
+  should satisfy.
+- **Start from concrete leads.** Every property the Prover breaks comes with the exact call
+  sequence that breaks it.
+- **Check your own attack vectors.** Use Autoprover to write a rule for a
+  suspected issue and let the Prover search for an execution that confirms it.
 
-## Updating
+## How it works
 
-| How you installed | How to update |
-|---|---|
-| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
-| `npx skills add` | Run the same `npx skills add` command again. |
-| By hand | `git pull` in your clone. A symlinked skill sees the new files at once. |
+1. **Analyze** the project: its components, entry points and the contracts it calls.
+2. **Set up** the prover with autosetup: compilers, contract links, and summaries, which are
+   equivalent models of library code the prover cannot handle as written.
+3. **Derive** security properties from the code and any design document.
+4. **Formalize** them as CVL rules and invariants.
+5. **Prove** them. Each counterexample is checked: a mistake in the spec or setup is fixed, and
+   a real violation is reported as a suspected bug.
 
-These update the skill. An update can change `skills/certora-autoprover/AUTOPROVER_REF`. Then
-at its next run the skill sees that its tools come from another commit. It asks you before it
-reinstalls them.
+The agent writes, the prover checks: every verdict comes from the Certora Prover, never from the
+agent.
 
-### Updating the AutoProver dependency
+**You get** a report in `certora/report/`:
+- suspected bugs, each with its counterexample and impact;
+- verified properties, each linked to its prover run;
+- coverage gaps, with the reason;
+- every assumption the setup relies on.
 
-The skill relies on autosetup, a utility for preparing contracts for optimal formal verification.
-The autosetup utility is part of [AutoProver](https://github.com/Certora/AutoProver).
-The skill builds its tools from the AutoProver commit named in
-`skills/certora-autoprover/AUTOPROVER_REF`. To take a newer one, write its SHA into that file:
+The report sits next to the specs and configurations, ready to rerun.
 
-```sh
-git ls-remote https://github.com/Certora/AutoProver master   # the current master SHA
-```
+## FAQ
 
-### Removing it
+**How long does a run take?** Often 40 minutes to 2 hours; a day or more for contracts heavy in
+nonlinear arithmetic and/or external dependencies. An interrupted run resumes where it stopped.
 
-```sh
-solc-select uninstall <version>             # each compiler, first
-uv tool uninstall ai-composer solc-select   # the tools
-claude plugin uninstall certora-autoprover  # or remove the skill from your agent's skill directory
-```
+**What does it cost?** No LLM key beyond your agent's own. The prover runs in the Certora cloud:
+2,000 free minutes per month, then paid; see [app.certora.com](https://app.certora.com).
+
+**Where does my code go?** The prover runs in the Certora cloud, so each prover job uploads the
+contracts it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
+prover job with its results.
+
+**What can it verify?** Solidity, in a Foundry or Hardhat project that builds. One main
+contract per run, together with the contracts it calls.
+
+**What if a property is hard for formal verification?** The skill summarizes code the property
+does not depend on, splits the property, and can hand it to the hosted Timeout Resolver.
+Anything still unsettled is reported as a coverage gap, never as verified or as a bug.
+
+**Does a clean report mean my contract is secure?** No. A proof is only as good as the property
+it proves: it shows the code satisfies the properties in the report, under the assumptions
+listed there, and says nothing about properties nobody wrote. Read the properties, and treat the
+report as strong evidence, not a guarantee.
 
 ## License
 
