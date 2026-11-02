@@ -33,12 +33,8 @@ Use your agent's skill installer and point it at the repository `Certora/autopro
 
 ### By hand
 
-Clone this repository and link `skills/certora-autoprover` into your agent's skill directory:
-
-```sh
-git clone https://github.com/Certora/autoprover-skill.git
-ln -s "$PWD/autoprover-skill/skills/certora-autoprover" ~/.claude/skills/certora-autoprover
-```
+Clone this repository, then link its `skills/certora-autoprover` directory into your agent's
+skill directory under the name `certora-autoprover`:
 
 | Agent | Skill directory |
 |---|---|
