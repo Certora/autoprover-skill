@@ -100,11 +100,8 @@ nonlinear arithmetic and/or external dependencies. An interrupted run resumes wh
 2,000 free minutes per month, then paid; see [app.certora.com](https://app.certora.com).
 
 **Where does my code go?** The prover runs in the Certora cloud, so each prover job uploads the
-contracts it verifies. A Timeout Resolver run also sends the job it works on to Certora. Your
-dashboard on [app.certora.com](https://app.certora.com) shows every prover job with its results.
-Certora's [Terms of Service](https://www.certora.com/terms) cover the code you upload: sections 4
-and 7 say how Certora uses, protects and deletes it. The
-[Privacy Policy](https://www.certora.com/privacy) covers personal information.
+contracts it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
+prover job with its results.
 
 **What can it verify?** Solidity, in a Foundry or Hardhat project that builds. One main
 contract per run, together with the contracts it calls.
