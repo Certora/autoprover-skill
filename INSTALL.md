@@ -31,24 +31,7 @@ claude plugin install certora-autoprover@certora-skills
 
 Use your agent's skill installer and point it at the repository `Certora/autoprover-skill`.
 
-### By hand
-
-Clone this repository and link `skills/certora-autoprover` into your agent's skill directory:
-
-```sh
-git clone https://github.com/Certora/autoprover-skill.git
-ln -s "$PWD/autoprover-skill/skills/certora-autoprover" ~/.claude/skills/certora-autoprover
-```
-
-| Agent | Skill directory |
-|---|---|
-| Claude Code | `~/.claude/skills` |
-| Cursor | `~/.cursor/skills` |
-| Gemini CLI | `~/.gemini/skills` |
-| opencode | `~/.config/opencode/skills` |
-| Codex | `~/.codex/skills` or `~/.agents/skills` |
-| Goose | `~/.config/goose/skills` |
-| anything else | `~/.agents/skills` |
+### Any agent without skill support
 
 For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
 or paste `skills/certora-autoprover/SKILL.md` into its context. Keep this repository accessible
@@ -71,7 +54,6 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 |---|---|
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
 | A skill installer | Run the installer again for the same repository. |
-| By hand | `git pull` in your clone. A symlinked skill sees the new files at once. |
 
 These update the skill. An update can change `skills/certora-autoprover/AUTOPROVER_REF`. Then
 at its next run the skill sees that its tools come from another commit. It asks you before it
