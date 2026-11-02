@@ -29,9 +29,7 @@ claude plugin install certora-autoprover@certora-skills
 
 ### Any agent with skill support
 
-```sh
-npx skills add Certora/autoprover-skill
-```
+Use your agent's skill installer and point it at the repository `Certora/autoprover-skill`.
 
 ### By hand
 
@@ -72,7 +70,7 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 | How you installed | How to update |
 |---|---|
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
-| `npx skills add` | Run the same `npx skills add` command again. |
+| A skill installer | Run the installer again for the same repository. |
 | By hand | `git pull` in your clone. A symlinked skill sees the new files at once. |
 
 These update the skill. An update can change `skills/certora-autoprover/AUTOPROVER_REF`. Then
