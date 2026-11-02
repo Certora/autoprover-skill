@@ -14,6 +14,7 @@
   "documentationUrl": "https://docs.certora.com/en/latest/",
   "supportUrl": "https://github.com/Certora/autoprover-skill/issues",
   "privacyPolicyUrl": "https://www.certora.com/privacy",
+  "termsOfServiceUrl": "https://www.certora.com/terms",
   "keywords": [
     "formal-verification",
     "solidity",
