@@ -12,7 +12,7 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.6.3"
+  version: "0.6.4"
   author: certora
 ---
 
