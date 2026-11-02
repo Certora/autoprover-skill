@@ -13,6 +13,7 @@
   "icon": "./.claude-plugin/icon.png",
   "documentationUrl": "https://docs.certora.com/en/latest/",
   "supportUrl": "https://github.com/Certora/autoprover-skill/issues",
+  "privacyPolicyUrl": "https://www.certora.com/privacy",
   "keywords": [
     "formal-verification",
     "solidity",
