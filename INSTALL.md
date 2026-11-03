@@ -44,7 +44,7 @@ you before it runs anything:
 
 - `certora-autosetup` and `certoraRun`, built with uv from the AutoProver repository at the
   commit in `skills/certora-autoprover/AUTOPROVER_REF`.
-- `solc-select`, from PyPI, and the compiler versions your project's build configuration names.
+- `solc-select` 1.2.0, from PyPI, and the compiler versions your project's build configuration names.
 
 The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 
