@@ -4,7 +4,7 @@
     "name": "Certora",
     "url": "https://github.com/Certora"
   },
-  "description": "Certora agent skills for formal verification of smart contracts.",
+  "description": "Certora agent skills for formal verification of smart contracts and Solana programs.",
   "renames": {
     "certora-verify": "certora-autoprover"
   },
@@ -27,6 +27,27 @@
         "certora",
         "cvl",
         "smart-contracts"
+      ]
+    },
+    {
+      "name": "certora-autoprover-solana",
+      "source": "./plugins/certora-autoprover-solana",
+      "displayName": "Certora AutoProver for Solana",
+      "description": "End-to-end formal verification of a Solana program with the Certora Solana Prover. Given an Anchor or solana-program crate, this skill analyzes the program's instructions and accounts, scaffolds a CVLR harness into the crate behind a cargo feature, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them as CVLR rules, and iterates the prover until every rule is verified, excused as a suspected bug, or skipped with justification \u2014 ending with a verification report.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Certora Ltd."
+      },
+      "homepage": "https://www.certora.com",
+      "repository": "https://github.com/Certora/autoprover-skill",
+      "license": "GPL-3.0-only",
+      "keywords": [
+        "formal-verification",
+        "solana",
+        "anchor",
+        "certora",
+        "cvlr",
+        "rust"
       ]
     }
   ]

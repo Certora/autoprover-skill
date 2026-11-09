@@ -14,6 +14,7 @@ reason. No CVL expertise needed.
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
   <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.6.7-blue?style=flat" alt="version 0.6.7"></a>
+  <a href="plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md"><img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat" alt="Solana version 0.1.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
@@ -90,6 +91,21 @@ agent.
 - every assumption the setup relies on.
 
 The report sits next to the specs and configurations, ready to rerun.
+
+## Solana programs (alpha)
+
+`certora-autoprover-solana` does the same for a Solana program: an Anchor or `solana-program`
+crate. It writes the properties as [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html)
+rules inside your crate, behind a `certora` cargo feature, and proves them with the Certora
+Solana Prover. It needs [uv](https://docs.astral.sh/uv/getting-started/installation/),
+[rustup](https://rustup.rs), a C compiler and a `CERTORAKEY`; it checks for the rest of the Rust
+and Solana toolchain and installs it with your go-ahead.
+
+```sh
+claude plugin install certora-autoprover-solana@certora-skills
+```
+
+> Use certora-autoprover-solana to verify the program in `programs/vault`.
 
 ## FAQ
 

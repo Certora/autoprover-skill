@@ -48,7 +48,14 @@ jobs:
                    plugins/certora-autoprover/skills/certora-autoprover/references/cvl-pitfalls.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/prover-loop.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/timeout-resolver.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/evals/evals.json; do
+                   plugins/certora-autoprover/skills/certora-autoprover/evals/evals.json \
+                   plugins/certora-autoprover-solana/LICENSE \
+                   plugins/certora-autoprover-solana/.claude-plugin/plugin.json \
+                   plugins/certora-autoprover-solana/.claude-plugin/icon.png \
+                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md \
+                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/AUTOPROVER_REF \
+                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/references/property-classes.md \
+                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/evals/evals.json; do
             if [ -z "$(git ls-files -- "$f")" ]; then
               echo "::error file=$f::$f is not tracked, so a clone will not have it"
               missing=1
