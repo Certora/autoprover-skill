@@ -34,8 +34,8 @@ Use your agent's skill installer and point it at the repository `Certora/autopro
 ### Any agent without skill support
 
 For an agent with no skill support, hand it [`AGENTS.md`](AGENTS.md) from the repository root,
-or paste `skills/certora-autoprover/SKILL.md` into its context. Keep this repository accessible
-to the agent so it can read the files `SKILL.md` refers to.
+or paste `plugins/certora-autoprover/skills/certora-autoprover/SKILL.md` into its context.
+Keep this repository accessible to the agent so it can read the files `SKILL.md` refers to.
 
 ### The tools
 
@@ -43,7 +43,7 @@ The skill installs its own tools the first time it runs. It says what it will in
 you before it runs anything:
 
 - `certora-autosetup` and `certoraRun`, built with uv from the AutoProver repository at the
-  commit in `skills/certora-autoprover/AUTOPROVER_REF`.
+  commit in `plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF`.
 - `solc-select` 1.2.0, from PyPI, and the compiler versions your project's build configuration names.
 
 The tools belong to uv afterwards, so `uv tool uninstall` removes them.
@@ -55,16 +55,17 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
 | A skill installer | Run the installer again for the same repository. |
 
-These update the skill. An update can change `skills/certora-autoprover/AUTOPROVER_REF`. Then
-at its next run the skill sees that its tools come from another commit. It asks you before it
-reinstalls them.
+These update the skill. An update can change
+`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF`. Then at its next run the skill
+sees that its tools come from another commit. It asks you before it reinstalls them.
 
 ### Updating the AutoProver dependency
 
 The skill relies on autosetup, a utility for preparing contracts for optimal formal verification.
 The autosetup utility is part of [AutoProver](https://github.com/Certora/AutoProver).
 The skill builds its tools from the AutoProver commit named in
-`skills/certora-autoprover/AUTOPROVER_REF`. To take a newer one, write its SHA into that file:
+`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF`. To take a newer one, write its
+SHA into that file:
 
 ```sh
 git ls-remote https://github.com/Certora/AutoProver master   # the current master SHA
