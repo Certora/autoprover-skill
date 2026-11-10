@@ -6,7 +6,7 @@ compatibility: >-
   Requires uv, rustup and a C compiler; the skill checks for and, with the user's go-ahead,
   installs the pinned Rust toolchain, cargo certora-sbf, the Solana platform tools and rustfilt.
   Needs a CERTORAKEY for the Certora cloud prover and network access to prover.certora.com,
-  crates.io, github.com and docs.certora.com. No Anthropic key is needed.
+  crates.io, github.com and docs.certora.com. No model API key is needed.
 metadata:
   version: "0.1.0"
   author: certora
@@ -65,7 +65,7 @@ Create the artifact directories up front: `mkdir -p certora/analysis certora/pro
 
 Every subcommand takes `--package P` where the workspace has more than one program, and `--help` lists the rest.
 
-**Waiting for a job.** A job takes minutes, longer than a single foreground command should hold your session. `prove` returns once the job is accepted; then call `certora-cvlr wait <link> --for 90` in the foreground, and repeat it while it prints `RUNNING`. The bound must stay under the timeout of the call that runs it. Shell tools often stop a call after a short default and then move it to the background (Claude Code: 2 minutes; Grok: 30 seconds via `block_until_ms`). To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it (Claude Code: `timeout: 600000` with `--for 480`; Grok: `block_until_ms: 600000` with `--for 480`). After each `RUNNING`, **emit a short progress note** (elapsed time and the status): an agent runtime may cut off a session that goes several minutes without output. **Never wait through a background monitor, a watcher script, a timer, or a turn that ends in the hope that a notice wakes you.** In real runs those wake-ups did not come, and finished jobs sat unread for hours.
+**Waiting for a job.** A job takes minutes, longer than a single foreground command should hold your session. `prove` returns once the job is accepted; then call `certora-cvlr wait <link> --for <seconds>` in the foreground, and repeat it while it prints `RUNNING`. The bound must stay under the time your shell tool keeps a call in the foreground. That time is a parameter of the call; the tool's own description gives its name, its default, and its maximum. It is the parameter that backgrounds the command, or stops it, when the time runs out. Read it and pass it on every `wait` call, rather than a remembered default. A foreground limit of two minutes fits `--for 90`. A limit of 30 seconds does not: `wait` is still sleeping when the runtime backgrounds the call, which is the wake-up wait forbidden below. To wait longer, pass a longer limit and set `--for` about two minutes under it. A limit of 600000 milliseconds fits `--for 480`; use that pair when the tool allows it. If its maximum is lower, pass the maximum and set `--for` two minutes under that maximum, in seconds. If the tool has no such parameter, use `--for 20`. After each `RUNNING`, **emit a short progress note** (elapsed time and the status): an agent runtime may cut off a session that goes several minutes without output. **Never wait through a background monitor, a watcher script, a timer, or a turn that ends in the hope that a notice wakes you.** In real runs those wake-ups did not come, and finished jobs sat unread for hours. A tool description that promises a notice does not change that.
 
 ## Phase 0 — Preflight
 
@@ -91,7 +91,7 @@ Fail fast with a specific message rather than improvising around a broken enviro
 
   The first call builds the package, which takes a few minutes; later calls reuse the build. Before that first call, tell the user what will be built (`ai-composer` with `certora-cli`, from the AutoProver repository at the pinned commit) and ask for their go-ahead.
 - **The toolchain.** Run `certora-cvlr toolchain`. Every line must read `ok`. For a `MISSING` line with an `install:` command, show the user the commands and ask for their go-ahead, run them only after they agree, and run `toolchain` again. A `MISSING` line without one (rustup, a C compiler) is the user's to install: stop and tell them.
-- **`CERTORAKEY`** set (cloud prover). No Anthropic key is needed: AutoProver makes no model call in this flow.
+- **`CERTORAKEY`** set (cloud prover). No model API key is needed: AutoProver makes no model call in this flow.
 - **The program.** The project builds with `cargo`, and the program is an Anchor program or a plain `solana-program` program whose package has a library target. Pinocchio programs and other frameworks are not supported yet. `setup` refuses a project on a Solana platform generation this AutoProver does not support, with the reason: stop and relay it.
 
 ## Phase 1 — Design document (optional but valuable)
