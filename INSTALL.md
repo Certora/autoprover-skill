@@ -27,6 +27,28 @@ claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills
 ```
 
+The Solana skill is the same marketplace, a second plugin:
+
+```sh
+claude plugin install certora-autoprover-solana@certora-skills
+```
+
+### Grok
+
+Grok reads this repository's `.claude-plugin/marketplace.json`. Add the marketplace, then
+install the plugin you want:
+
+```sh
+grok plugin marketplace add Certora/autoprover-skill
+grok plugin install certora-autoprover --trust
+grok plugin install certora-autoprover-solana --trust
+```
+
+From a local checkout, pass that directory to `marketplace add` instead of
+`Certora/autoprover-skill`. `--trust` is required for the skill to load. Confirm with
+`grok inspect`: the skill's source is `plugin: certora-autoprover` or
+`plugin: certora-autoprover-solana`.
+
 ### Any agent with skill support
 
 Use your agent's skill installer and point it at the repository `Certora/autoprover-skill`.
@@ -53,6 +75,7 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 | How you installed | How to update |
 |---|---|
 | Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
+| Grok plugin | `grok plugin marketplace update && grok plugin update certora-autoprover` (or `certora-autoprover-solana`) |
 | A skill installer | Run the installer again for the same repository. |
 
 These update the skill. An update can change
@@ -77,4 +100,5 @@ git ls-remote https://github.com/Certora/AutoProver master   # the current maste
 solc-select uninstall <version>             # each compiler, first
 uv tool uninstall ai-composer solc-select   # the tools
 claude plugin uninstall certora-autoprover  # or remove the skill from your agent's skill directory
+grok plugin uninstall certora-autoprover --confirm
 ```

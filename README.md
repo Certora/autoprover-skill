@@ -35,6 +35,9 @@ export PATH="$HOME/.local/bin:$PATH"   # uv places its tools here
 export CERTORAKEY=...
 claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills
+# or, in Grok:
+# grok plugin marketplace add Certora/autoprover-skill
+# grok plugin install certora-autoprover --trust
 ```
 
 Add the two exports to your shell startup file and (re)start your agent; for other agents,
@@ -103,6 +106,8 @@ and Solana toolchain and installs it with your go-ahead.
 
 ```sh
 claude plugin install certora-autoprover-solana@certora-skills
+# or, in Grok:
+# grok plugin install certora-autoprover-solana --trust
 ```
 
 > Use certora-autoprover-solana to verify the program in `programs/vault`.
