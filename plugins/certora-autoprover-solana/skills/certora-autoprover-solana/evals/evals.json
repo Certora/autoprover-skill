@@ -33,16 +33,17 @@
     },
     {
       "id": 3,
-      "name": "setup-refuses-unsupported-project",
+      "name": "refuses-a-project-it-cannot-verify",
       "prompt": "Please formally verify the Solana program in <project> using the Certora prover.",
       "fixture": "A Cargo workspace with two library packages and nothing naming which one is the program, and no Solana dependency in either.",
       "example_fixture": "none: two `cargo new --lib` packages in one workspace",
-      "expected_output": "Preflight passes; setup refuses with its own reason (no package named, or no supported Solana platform generation); the skill relays the reason and stops without editing the project by hand or writing rules.",
+      "expected_output": "The skill stops without editing the project or writing rules, and tells the user why: either preflight finds no Anchor or solana-program dependency, or `certora-cvlr setup` refuses and the skill relays its reason. Refusing in preflight is the better outcome when the code already shows there is no Solana program.",
       "assertions": [
-        "certora-cvlr setup was run and exited non-zero",
-        "the skill reported setup's reason to the user and stopped",
-        "no Cargo.toml in the fixture was edited and no src/certora/ directory exists"
-      ]
+        "the skill stopped before Phase 2 and gave the user a concrete reason (no Solana program, or setup's refusal)",
+        "no Cargo.toml in the fixture was edited and no src/certora/ directory exists",
+        "no rules or properties were written"
+      ],
+      "notes": "First run, 2026-11-09: stopped in preflight on reading the crates, without building AutoProver; 12 turns. A fixture only setup can refuse is a real solana-program crate on a platform generation outside AutoProver's reference set."
     }
   ]
 }
