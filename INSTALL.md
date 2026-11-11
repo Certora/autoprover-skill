@@ -27,6 +27,12 @@ claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills
 ```
 
+The Solana skill is the same marketplace, a second plugin:
+
+```sh
+claude plugin install certora-autoprover-solana@certora-skills
+```
+
 ### Any agent with skill support
 
 Use your agent's skill installer and point it at the repository `Certora/autoprover-skill`.
@@ -52,7 +58,7 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 
 | How you installed | How to update |
 |---|---|
-| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` |
+| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` (or `certora-autoprover-solana`) |
 | A skill installer | Run the installer again for the same repository. |
 
 These update the skill. An update can change

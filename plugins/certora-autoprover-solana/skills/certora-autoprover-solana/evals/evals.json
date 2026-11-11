@@ -1,0 +1,49 @@
+{
+  "skill_name": "certora-autoprover-solana",
+  "notes": "Dev-time eval set for skill authoring. Fixtures are described by SHAPE so the set is not tied to any one checkout; `example_fixture` points at a copy in the AutoProver repository, but a runner may supply an equivalent. Each eval runs against a fresh COPY of its fixture, because the flow edits the crate and writes certora/ artifacts. Evals 1-2 need CERTORAKEY and submit real cloud prover jobs; the prover's share is cheap, the agent's tokens are the cost. Eval 3 is offline and fails at setup.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "anchor-vault-end-to-end",
+      "prompt": "Formally verify the Solana program in <project> with the Certora prover \u2014 come up with properties for it and prove them.",
+      "fixture": "A small Anchor workspace with one program: a vault with initialize, deposit and withdraw instructions over a vault account that records an owner and a balance. No pre-existing certora/ directory or src/certora/ module.",
+      "example_fixture": "test_scenarios/solana_vault_idl/ in the AutoProver repository",
+      "expected_output": "certora-cvlr toolchain all ok; setup scaffolds the crate and declares one module per component plus invariants and invariant_rules; certora/analysis/application.json names the instructions and the vault account; properties per component include a signer/owner check on withdraw and balance accounting on deposit and withdraw; Phase 5 proves at least one structural invariant with a base case and one step per writer, all VERIFIED; each component's full prove is clean or its failures are marked; certora/report/report.md lists setup's edits and links every job.",
+      "assertions": [
+        "certora/logs/setup.log exists and the crate's Cargo.toml has a certora feature",
+        "src/certora/specs/invariants.rs holds predicates and no #[rule], and invariant_rules.rs holds the base cases and steps",
+        "every component module was checked with `certora-cvlr check` and proved with `certora-cvlr prove`, never with a hand-written conf or cargo command",
+        "a property that withdraw rejects a signer who is not the owner exists and is mapped to a rule",
+        "report.md states the per-outcome counts, lists setup's edits to the crate, and links the prover jobs"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "planted-bug-surfaces-finding",
+      "prompt": "Formally verify <project> with the Certora Solana prover. I want real verification results, not just rules.",
+      "fixture": "A small Anchor program with a KNOWN planted bug: a withdraw instruction whose accounts struct does not tie the vault account to its owner (no has_one or seeds constraint), so any signer can withdraw from any vault. Any comment revealing the bug is removed from the copy.",
+      "example_fixture": "none yet: build one from the vault above by removing its owner constraint",
+      "expected_output": "Properties include that withdraw moves funds only for the vault's owner. The prover finds the violation; the skill marks the rule expected-to-fail with reason 'genuine issue' and reports it as a finding with the pre-state and the call. It does NOT weaken the rule until it passes, and does NOT skip the property.",
+      "assertions": [
+        "a property that only the vault's owner can withdraw from it exists in the properties artifact",
+        "its rule is BAD/VIOLATED in report.json and marked expected-to-fail as a 'genuine issue', not removed and not marked 'prover limitation'",
+        "report.md describes the missing owner check as a finding for human review",
+        "no rule asserts the buggy behavior or assumes away the missing constraint"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "refuses-a-project-it-cannot-verify",
+      "prompt": "Please formally verify the Solana program in <project> using the Certora prover.",
+      "fixture": "A Cargo workspace with two library packages and nothing naming which one is the program, and no Solana dependency in either.",
+      "example_fixture": "none: two `cargo new --lib` packages in one workspace",
+      "expected_output": "The skill stops without editing the project or writing rules, and tells the user why: either preflight finds no Anchor or solana-program dependency, or `certora-cvlr setup` refuses and the skill relays its reason. Refusing in preflight is the better outcome when the code already shows there is no Solana program.",
+      "assertions": [
+        "the skill stopped before Phase 2 and gave the user a concrete reason (no Solana program, or setup's refusal)",
+        "no Cargo.toml in the fixture was edited and no src/certora/ directory exists",
+        "no rules or properties were written"
+      ],
+      "notes": "First run, 2026-11-09 (Claude Opus 5.5): stopped in preflight on reading the crates, without building AutoProver; 12 turns. Grok 4.7 Build, 2026-11-10: same refusal in preflight, 4 turns, $0.18, no crate edits. A fixture only setup can refuse is a real solana-program crate on a platform generation outside AutoProver's reference set."
+    }
+  ]
+}
