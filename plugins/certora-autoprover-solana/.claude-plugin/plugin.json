@@ -2,7 +2,7 @@
   "name": "certora-autoprover-solana",
   "displayName": "Certora AutoProver for Solana",
   "description": "End-to-end formal verification of a Solana program with the Certora Solana Prover. Given an Anchor or solana-program crate, this skill analyzes the program's instructions and accounts, scaffolds a CVLR harness into the crate behind a cargo feature, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them as CVLR rules, and iterates the prover until every rule is verified, excused as a suspected bug, or skipped with justification \u2014 ending with a verification report.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Certora Ltd.",
     "url": "https://www.certora.com"

@@ -12,7 +12,7 @@ compatibility: >-
   placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
   the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.6.7"
+  version: "0.6.8"
   author: certora
 ---
 
@@ -91,7 +91,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
 - `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`), built from the AutoProver commit this skill pins. If they are missing or stale, you install them as described here. There is no separate installer. `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
 
-  The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF`, the file beside this one; read it and substitute it for `<ref>`:
+  The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF.txt`, the file beside this one; read it and substitute it for `<ref>`:
 
   ```bash
   GIT_CONFIG_COUNT=1 \
@@ -103,7 +103,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
   The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key.
 
-  When the commands are on PATH, also make sure that they come from the pinned ref: `uv tool list --show-version-specifiers` names the git source of `ai-composer`, and the commit in it must be the one in `AUTOPROVER_REF`. A different commit means the skill was updated after the tools were built. Then add `--reinstall` to the command above.
+  When the commands are on PATH, also make sure that they come from the pinned ref: `uv tool list --show-version-specifiers` names the git source of `ai-composer`, and the commit in it must be the one in `AUTOPROVER_REF.txt`. A different commit means the skill was updated after the tools were built. Then add `--reinstall` to the command above.
 
   Before you install or reinstall, tell the user what you will install: `ai-composer` with `certora-cli` from the AutoProver repository at that commit, and later `solc-select` and the project's compilers. Say that uv builds it and that it takes a few minutes. Ask for their go-ahead, and install only after they agree. `uv` itself must already be on PATH. If it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
 

@@ -49,7 +49,7 @@ The skill installs its own tools the first time it runs. It says what it will in
 you before it runs anything:
 
 - `certora-autosetup` and `certoraRun`, built with uv from the AutoProver repository at the
-  commit in `plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF`.
+  commit in `plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`.
 - `solc-select` 1.2.0, from PyPI, and the compiler versions your project's build configuration names.
 
 The tools belong to uv afterwards, so `uv tool uninstall` removes them.
@@ -62,7 +62,7 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 | A skill installer | Run the installer again for the same repository. |
 
 These update the skill. An update can change
-`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF`. Then at its next run the skill
+`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`. Then at its next run the skill
 sees that its tools come from another commit. It asks you before it reinstalls them.
 
 ### Updating the AutoProver dependency
@@ -70,7 +70,7 @@ sees that its tools come from another commit. It asks you before it reinstalls t
 The skill relies on autosetup, a utility for preparing contracts for optimal formal verification.
 The autosetup utility is part of [AutoProver](https://github.com/Certora/AutoProver).
 The skill builds its tools from the AutoProver commit named in
-`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF`. To take a newer one, write its
+`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`. To take a newer one, write its
 SHA into that file:
 
 ```sh

@@ -8,7 +8,7 @@ compatibility: >-
   Needs a CERTORAKEY for the Certora cloud prover and network access to prover.certora.com,
   crates.io, github.com and docs.certora.com. No model API key is needed.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   author: certora
 ---
 
@@ -71,7 +71,7 @@ Every subcommand takes `--package P` where the workspace has more than one progr
 
 Fail fast with a specific message rather than improvising around a broken environment.
 
-- **`certora-cvlr`.** It is a command of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not on PyPI. The commit is pinned because this skill names its subcommands and flags: it is the single line in `AUTOPROVER_REF`, the file beside this one. Run it through `uvx`, never `uv tool install`: the Solidity skill in this marketplace installs the same package as a tool at its own pin, and two installs at two pins would replace each other. `uv` must already be on PATH; if it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
+- **`certora-cvlr`.** It is a command of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not on PyPI. The commit is pinned because this skill names its subcommands and flags: it is the single line in `AUTOPROVER_REF.txt`, the file beside this one. Run it through `uvx`, never `uv tool install`: the Solidity skill in this marketplace installs the same package as a tool at its own pin, and two installs at two pins would replace each other. `uv` must already be on PATH; if it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
 
   Write a wrapper once, from the project root, substituting the pin for `<ref>`, and call it for every command below:
 
@@ -87,7 +87,7 @@ Fail fast with a specific message rather than improvising around a broken enviro
   chmod +x .certora_internal/cvlr/certora-cvlr
   ```
 
-  The `GIT_CONFIG_*` rewrite clones AutoProver's public `graphcore` submodule over HTTPS, so no GitHub SSH key is needed. `env -u CERTORA` is load-bearing: a `CERTORA` variable in the environment makes the prover CLI refuse every submission before upload, with a message that names neither. Below, `certora-cvlr` means this wrapper, `<project root>/.certora_internal/cvlr/certora-cvlr`; give sub-agents its absolute path. When `AUTOPROVER_REF` changes, rewrite it.
+  The `GIT_CONFIG_*` rewrite clones AutoProver's public `graphcore` submodule over HTTPS, so no GitHub SSH key is needed. `env -u CERTORA` is load-bearing: a `CERTORA` variable in the environment makes the prover CLI refuse every submission before upload, with a message that names neither. Below, `certora-cvlr` means this wrapper, `<project root>/.certora_internal/cvlr/certora-cvlr`; give sub-agents its absolute path. When `AUTOPROVER_REF.txt` changes, rewrite it.
 
   The first call builds the package, which takes a few minutes; later calls reuse the build. Before that first call, tell the user what will be built (`ai-composer` with `certora-cli`, from the AutoProver repository at the pinned commit) and ask for their go-ahead.
 - **The toolchain.** Run `certora-cvlr toolchain`. Every line must read `ok`. For a `MISSING` line with an `install:` command, show the user the commands and ask for their go-ahead, run them only after they agree, and run `toolchain` again. A `MISSING` line without one (rustup, a C compiler) is the user's to install: stop and tell them.
