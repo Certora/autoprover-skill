@@ -41,7 +41,7 @@ jobs:
                    plugins/certora-autoprover/.claude-plugin/plugin.json \
                    plugins/certora-autoprover/.claude-plugin/icon.png \
                    plugins/certora-autoprover/skills/certora-autoprover/SKILL.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF \
+                   plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt \
                    plugins/certora-autoprover/skills/certora-autoprover/references/autosetup.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/property-classes.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/cvl-writing.md \
@@ -53,7 +53,7 @@ jobs:
                    plugins/certora-autoprover-solana/.claude-plugin/plugin.json \
                    plugins/certora-autoprover-solana/.claude-plugin/icon.png \
                    plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md \
-                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/AUTOPROVER_REF \
+                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/AUTOPROVER_REF.txt \
                    plugins/certora-autoprover-solana/skills/certora-autoprover-solana/references/property-classes.md \
                    plugins/certora-autoprover-solana/skills/certora-autoprover-solana/evals/evals.json; do
             if [ -z "$(git ls-files -- "$f")" ]; then
@@ -226,14 +226,38 @@ jobs:
               sys.exit("\n".join(f"::error::{e}" for e in errors))
           PY
 
+      # The plugin directory refuses a plugin from an unverified organization that
+      # ships any other file type, a file that starts with #!, or a file that is
+      # not UTF-8 text without NUL bytes.
+      - name: Every plugin file is a type the plugin directory accepts
+        run: |
+          set -eu
+          bad=0
+          for f in $(git ls-files 'plugins/*'); do
+            case "$f" in
+              *.md|*.txt|*.json|*.yml|*.yaml|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico|*/LICENSE) ;;
+              *) echo "::error file=$f::not a file type the plugin directory accepts"; bad=1; continue ;;
+            esac
+            case "$f" in
+              *.png|*.jpg|*.jpeg|*.gif|*.webp|*.ico) continue ;;
+            esac
+            if [ "$(head -c 2 "$f")" = '#!' ]; then
+              echo "::error file=$f::starts with #!"; bad=1
+            fi
+            if ! iconv -f UTF-8 -t UTF-8 "$f" > /dev/null 2>&1 || [ "$(LC_ALL=C tr -d '\000' < "$f" | wc -c)" != "$(wc -c < "$f")" ]; then
+              echo "::error file=$f::not UTF-8 text without NUL bytes"; bad=1
+            fi
+          done
+          exit $bad
+
       # One pin per skill, and the only copy of it. The agent reads this file
       # in Phase 0, so a SHA written into prose is a second copy that will drift.
       - name: The AutoProver pins are files, and nothing duplicates them
         run: |
           set -eu
-          pins=$(git ls-files 'plugins/*/skills/*/AUTOPROVER_REF')
+          pins=$(git ls-files 'plugins/*/skills/*/AUTOPROVER_REF.txt')
           if [ -z "$pins" ]; then
-            echo "::error::no plugins/*/skills/*/AUTOPROVER_REF is tracked"
+            echo "::error::no plugins/*/skills/*/AUTOPROVER_REF.txt is tracked"
             exit 1
           fi
           for pin in $pins; do
@@ -245,7 +269,7 @@ jobs:
             echo "ok  $pin is $ref"
           done
           if git ls-files '*.md' | xargs grep -nE '\b[0-9a-f]{40}\b' ; then
-            echo "::error::a 40-character SHA appears in Markdown; the pin belongs only in AUTOPROVER_REF"
+            echo "::error::a 40-character SHA appears in Markdown; the pin belongs only in AUTOPROVER_REF.txt"
             exit 1
           fi
           echo "ok  no Markdown file carries a SHA"
