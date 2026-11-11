@@ -35,18 +35,20 @@ jobs:
           for f in README.md \
                    AGENTS.md \
                    LICENSE \
-                   .claude-plugin/plugin.json \
                    .claude-plugin/marketplace.json \
                    .agents/plugins/marketplace.json \
-                   skills/certora-autoprover/SKILL.md \
-                   skills/certora-autoprover/AUTOPROVER_REF \
-                   skills/certora-autoprover/references/autosetup.md \
-                   skills/certora-autoprover/references/property-classes.md \
-                   skills/certora-autoprover/references/cvl-writing.md \
-                   skills/certora-autoprover/references/cvl-pitfalls.md \
-                   skills/certora-autoprover/references/prover-loop.md \
-                   skills/certora-autoprover/references/timeout-resolver.md \
-                   skills/certora-autoprover/evals/evals.json; do
+                   plugins/certora-autoprover/LICENSE \
+                   plugins/certora-autoprover/.claude-plugin/plugin.json \
+                   plugins/certora-autoprover/.claude-plugin/icon.png \
+                   plugins/certora-autoprover/skills/certora-autoprover/SKILL.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/autosetup.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/property-classes.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/cvl-writing.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/cvl-pitfalls.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/prover-loop.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/timeout-resolver.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/evals/evals.json; do
             if [ -z "$(git ls-files -- "$f")" ]; then
               echo "::error file=$f::$f is not tracked, so a clone will not have it"
               missing=1
@@ -70,8 +72,9 @@ jobs:
             exit 1
           fi
 
-      # The manifests restate SKILL.md's own words, and the version string is
-      # written out in five places. This step keeps them from drifting apart.
+      # The manifests restate SKILL.md's own words, and each plugin's version
+      # string is written out in five places. This step keeps them from
+      # drifting apart, for every plugin the marketplaces list.
       - name: Manifests agree with SKILL.md
         run: |
           set -euo pipefail
@@ -97,102 +100,145 @@ jobs:
               end = text.find("\n---\n", 3)
               if end < 0:
                   return None
-              return yaml.safe_load(text[4:end])
+              try:
+                  return yaml.safe_load(text[4:end])
+              except yaml.YAMLError:
+                  return None
 
-          skills = sorted(pathlib.Path("skills").glob("*/SKILL.md"))
-          check(bool(skills), "no skills/*/SKILL.md found")
-
-          described = {}
-          for skill in skills:
-              fm = frontmatter(skill)
-              if fm is None:
-                  errors.append(f"{skill}: no YAML frontmatter")
-                  continue
-              name = (fm.get("name") or "").strip()
-              desc = (fm.get("description") or "").strip()
-              version = str((fm.get("metadata") or {}).get("version") or "").strip()
-              check(bool(name), f"{skill}: frontmatter has no name")
-              check(name == skill.parent.name,
-                    f"{skill}: name {name!r} does not match directory {skill.parent.name!r}")
-              check(bool(desc), f"{skill}: frontmatter has no description")
-              check(bool(version), f"{skill}: frontmatter has no metadata.version")
-              described[name] = (desc, version)
-              print(f"{skill}: name={name} version={version} description={len(desc)} chars")
-
-          plugin = json.load(open(".claude-plugin/plugin.json"))
-          claude = json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]
-          agents = json.load(open(".agents/plugins/marketplace.json"))["plugins"][0]
-
-          pname = plugin["name"]
-          check(pname in described,
-                f"plugin.json names {pname!r}, which has no skills/{pname}/SKILL.md")
-
-          # The manifest description is a verbatim prefix of the skill's own
-          # description, so a rewrite of SKILL.md that leaves the manifests
-          # behind fails here instead of shipping.
-          skill_desc, skill_version = described.get(pname, ("", ""))
-          pdesc = plugin["description"]
-          diverge = next(
-              (i for i, (a, b) in enumerate(zip(pdesc, skill_desc)) if a != b),
-              min(len(pdesc), len(skill_desc)),
-          )
-          check(skill_desc.startswith(pdesc),
-                "plugin.json description is not a verbatim prefix of the SKILL.md "
-                f"description; they diverge at char {diverge}")
-          check(len(pdesc) >= 120,
-                f"plugin.json description is {len(pdesc)} chars, too short to describe the skill")
-
-          for label, entry in (("claude marketplace", claude), ("agents marketplace", agents)):
-              check(entry["name"] == pname, f"{label}: name {entry['name']!r} != {pname!r}")
-              check(entry["version"] == plugin["version"],
-                    f"{label}: version {entry['version']!r} != {plugin['version']!r}")
-              check(entry["description"] == pdesc,
-                    f"{label}: description does not match plugin.json")
-
-          check(claude["source"] == "./", f"claude marketplace: source {claude['source']!r} != './'")
-          check(agents["source"] == {"source": "local", "path": "./"},
-                f"agents marketplace: source {agents['source']!r} is not the local './' form")
-
-          # Version lives in five places. All five, or none of them, are true.
           readme = pathlib.Path("README.md").read_text(encoding="utf-8")
-          badge = re.search(r"img\.shields\.io/badge/version-([0-9A-Za-z.+-]+?)-", readme)
-          check(badge is not None, "README.md has no version badge")
-          versions = {
-              "plugin.json": plugin["version"],
-              "claude marketplace": claude["version"],
-              "agents marketplace": agents["version"],
-              f"skills/{pname}/SKILL.md": skill_version,
-              "README.md badge": badge.group(1) if badge else None,
-          }
-          check(len(set(versions.values())) == 1, f"version strings disagree: {versions}")
-
+          badges = dict(re.findall(
+              r'<a href="([^"]+/SKILL\.md)"><img src="https://img\.shields\.io/badge/'
+              r'version-([0-9A-Za-z.+-]+?)-', readme))
           licence = "GPL-3.0-only"
-          check(plugin["license"] == licence, f"plugin.json license is {plugin['license']!r}")
-          check(claude["license"] == licence, f"claude marketplace license is {claude['license']!r}")
-          text = pathlib.Path("LICENSE").read_text(encoding="utf-8")
-          check("GNU GENERAL PUBLIC LICENSE" in text and "Version 3" in text,
+          licence_text = pathlib.Path("LICENSE").read_bytes()
+          check(b"GNU GENERAL PUBLIC LICENSE" in licence_text and b"Version 3" in licence_text,
                 "LICENSE is not the GPL version 3 text")
+
+          claude_entries = json.load(open(".claude-plugin/marketplace.json"))["plugins"]
+          agents_entries = {e["name"]: e
+                            for e in json.load(open(".agents/plugins/marketplace.json"))["plugins"]}
+          check(bool(claude_entries), "the claude marketplace lists no plugins")
+          check({e["name"] for e in claude_entries} == set(agents_entries),
+                "the claude and agents marketplaces list different plugins: "
+                f"{sorted(e['name'] for e in claude_entries)} vs {sorted(agents_entries)}")
+
+          # Skill installers that follow a repository (`npx skills update`)
+          # find a moved skill again by its name, and only when no other
+          # skill in the repository has that name.
+          skill_dirs = {}
+          for skill in sorted(pathlib.Path("plugins").glob("*/skills/*/SKILL.md")):
+              skill_dirs.setdefault(skill.parent.name, []).append(str(skill.parent))
+          for name, dirs in skill_dirs.items():
+              check(len(dirs) == 1, f"skill name {name!r} is used by more than one skill: {dirs}")
+
+          for claude in claude_entries:
+              pname = claude["name"]
+              root = pathlib.Path("plugins") / pname
+              source = f"./plugins/{pname}"
+              check(claude["source"] == source,
+                    f"claude marketplace: {pname} source {claude['source']!r} != {source!r}")
+              agents = agents_entries.get(pname)
+              if agents is not None:
+                  check(agents["source"] == {"source": "local", "path": source},
+                        f"agents marketplace: {pname} source {agents['source']!r} "
+                        f"is not the local {source!r} form")
+
+              plugin_json = root / ".claude-plugin" / "plugin.json"
+              if not plugin_json.is_file():
+                  errors.append(f"{plugin_json} is missing")
+                  continue
+              plugin = json.load(open(plugin_json))
+              check(plugin["name"] == pname, f"{plugin_json}: name {plugin['name']!r} != {pname!r}")
+
+              described = {}
+              for skill in sorted(root.glob("skills/*/SKILL.md")):
+                  fm = frontmatter(skill)
+                  if fm is None:
+                      errors.append(f"{skill}: no valid YAML frontmatter")
+                      continue
+                  name = (fm.get("name") or "").strip()
+                  desc = (fm.get("description") or "").strip()
+                  version = str((fm.get("metadata") or {}).get("version") or "").strip()
+                  check(bool(name), f"{skill}: frontmatter has no name")
+                  check(name == skill.parent.name,
+                        f"{skill}: name {name!r} does not match directory {skill.parent.name!r}")
+                  check(bool(desc), f"{skill}: frontmatter has no description")
+                  check(bool(version), f"{skill}: frontmatter has no metadata.version")
+                  described[name] = (desc, version)
+                  print(f"{skill}: name={name} version={version} description={len(desc)} chars")
+              check(pname in described, f"{pname} has no {root}/skills/{pname}/SKILL.md")
+
+              # The manifest description is a verbatim prefix of the skill's own
+              # description, so a rewrite of SKILL.md that leaves the manifests
+              # behind fails here instead of shipping.
+              skill_desc, skill_version = described.get(pname, ("", ""))
+              pdesc = plugin["description"]
+              diverge = next(
+                  (i for i, (a, b) in enumerate(zip(pdesc, skill_desc)) if a != b),
+                  min(len(pdesc), len(skill_desc)),
+              )
+              check(skill_desc.startswith(pdesc),
+                    f"{plugin_json} description is not a verbatim prefix of the SKILL.md "
+                    f"description; they diverge at char {diverge}")
+              check(len(pdesc) >= 120,
+                    f"{plugin_json} description is {len(pdesc)} chars, too short to describe the skill")
+
+              for label, entry in (("claude marketplace", claude), ("agents marketplace", agents)):
+                  if entry is None:
+                      continue
+                  check(entry["version"] == plugin["version"],
+                        f"{label}: {pname} version {entry['version']!r} != {plugin['version']!r}")
+                  check(entry["description"] == pdesc,
+                        f"{label}: {pname} description does not match {plugin_json}")
+
+              # A plugin's version lives in five places. All five, or none of them, are true.
+              skill_md = f"{root}/skills/{pname}/SKILL.md"
+              check(skill_md in badges, f"README.md has no version badge linking to {skill_md}")
+              versions = {
+                  str(plugin_json): plugin["version"],
+                  "claude marketplace": claude["version"],
+                  "agents marketplace": agents["version"] if agents else None,
+                  skill_md: skill_version,
+                  "README.md badge": badges.get(skill_md),
+              }
+              check(len(set(versions.values())) == 1, f"{pname} version strings disagree: {versions}")
+
+              # An installed plugin is a copy of its own directory and nothing
+              # else, so it carries its own copy of the licence.
+              check(plugin["license"] == licence, f"{plugin_json} license is {plugin['license']!r}")
+              check(claude["license"] == licence,
+                    f"claude marketplace: {pname} license is {claude['license']!r}")
+              plugin_licence = root / "LICENSE"
+              check(plugin_licence.is_file() and plugin_licence.read_bytes() == licence_text,
+                    f"{plugin_licence} is not a copy of LICENSE")
+
+              print(f"manifests agree: {pname} {plugin['version']} {licence}, "
+                    f"description {len(pdesc)} of {len(skill_desc)} chars")
 
           if errors:
               sys.exit("\n".join(f"::error::{e}" for e in errors))
-          print(f"manifests agree: {pname} {plugin['version']} {licence}, "
-                f"description {len(pdesc)} of {len(skill_desc)} chars")
           PY
 
-      # One pin, and the only copy of it. The agent reads this file in Phase 0,
-      # so a SHA written into prose is a second copy that will drift.
-      - name: The AutoProver pin is a file, and nothing duplicates it
+      # One pin per skill, and the only copy of it. The agent reads this file
+      # in Phase 0, so a SHA written into prose is a second copy that will drift.
+      - name: The AutoProver pins are files, and nothing duplicates them
         run: |
           set -eu
-          ref=$(tr -d '[:space:]' < skills/certora-autoprover/AUTOPROVER_REF)
-          case "$ref" in
-            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-            *) echo "::error file=skills/certora-autoprover/AUTOPROVER_REF::not a 40-character SHA: $ref"; exit 1 ;;
-          esac
-          echo "ok  pin is $ref"
+          pins=$(git ls-files 'plugins/*/skills/*/AUTOPROVER_REF')
+          if [ -z "$pins" ]; then
+            echo "::error::no plugins/*/skills/*/AUTOPROVER_REF is tracked"
+            exit 1
+          fi
+          for pin in $pins; do
+            ref=$(tr -d '[:space:]' < "$pin")
+            if ! printf '%s' "$ref" | grep -qxE '[0-9a-f]{40}'; then
+              echo "::error file=$pin::not a 40-character SHA: $ref"
+              exit 1
+            fi
+            echo "ok  $pin is $ref"
+          done
           if git ls-files '*.md' | xargs grep -nE '\b[0-9a-f]{40}\b' ; then
             echo "::error::a 40-character SHA appears in Markdown; the pin belongs only in AUTOPROVER_REF"
             exit 1
           fi
           echo "ok  no Markdown file carries a SHA"
-
