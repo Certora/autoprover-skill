@@ -24,7 +24,7 @@ contract X with the prover", "write a Certora spec for X and run it".
 
 ## What to read
 
-`SKILL.md` is the flow of record: phases 0-7. Read it in full before acting. It names six
+`SKILL.md` is the flow of record: phases 0-6. Read it in full before acting. It names six
 references, each read when its phase needs it:
 
 - `references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
