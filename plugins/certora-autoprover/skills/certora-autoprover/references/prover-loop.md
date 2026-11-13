@@ -83,7 +83,7 @@ Ask the data API with `CERTORAKEY`, through the `prover-cli` that ships with aut
 
 ### Keep each run under about 15 minutes
 
-Each full run should finish in about 15 minutes. A rule that runs for an hour costs the cloud time and also stalls the whole round, because the barrier waits for the slowest component. When a run, or one rule in it, takes clearly longer, fix it before the next full run:
+Each full run should finish in about 15 minutes. A rule that runs for an hour costs the cloud time and also stalls the whole round, because judging waits for the slowest unit. When a run, or one rule in it, takes clearly longer, fix it before the next full run:
 
 1. **Summarize expensive internals the property does not depend on.** Find what the slow rule spends its time in: heavy math, loops, hashing, deep internal calls. If the property does not depend on how that code computes its result, replace it with a sound summary: a ghost or an uninterpreted function with the facts the rule needs, or `DELETE` for a method the rule never calls. Record each summary and its soundness argument in the commentary. Never summarize the code the property is about.
 2. **Split rules.** Give each case its own rule, or narrow a parametric rule into several rules, each over a group of methods. While you iterate, run only the slow rules with a `rule` filter.
