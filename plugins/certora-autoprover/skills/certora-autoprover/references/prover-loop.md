@@ -163,7 +163,7 @@ Anything else: consult the docs and make *principled* changes — never brute-fo
 
 ## The generator's inner loop
 
-This is the write↔prove loop the generator role runs on its own component (judging is a separate step that happens after generation — see SKILL.md Phase 5; the generator never judges its own spec in the same pass, and in sequential mode judging is a deliberate fresh-context re-read of the files on disk):
+This is the write↔prove loop the generator role runs on its own component (judging is a separate step that happens after generation — see SKILL.md Phase 6; the generator never judges its own spec in the same pass, and in sequential mode judging is a deliberate fresh-context re-read of the files on disk):
 
 1. Edit spec → typecheck-only run → full (or rule-filtered) run.
 2. Analyze every non-verified rule per the table; apply the fix; re-run. Iterate prover-only through tight counterexample-fix cycles.
