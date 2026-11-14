@@ -2,8 +2,11 @@
 
 ## Prerequisites
 
-- A Foundry or Hardhat project that builds, with `forge` or `node`.
-- Java 19 or newer.
+- For a Solidity contract: a Foundry or Hardhat project that builds, with `forge` or `node`, and
+  Java 19 or newer.
+- For a Solana program (alpha): an Anchor or `solana-program` crate, [rustup](https://rustup.rs)
+  and a C compiler. The skill checks for the rest of the Rust and Solana toolchain and installs
+  it with your go-ahead.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The skill installs its tools
   with it. It does not install uv itself.
 - `CERTORAKEY`, required: one organization API key, created on the API Access page at

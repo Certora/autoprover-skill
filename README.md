@@ -12,7 +12,7 @@ with a reason. No formal-verification expertise needed.
 
 | Skill | For | Rules written in |
 |---|---|---|
-| `certora-autoprover` | a Solidity contract, in a Foundry or Hardhat project | [CVL](https://docs.certora.com/en/latest/) |
+| `certora-autoprover` | a Solidity contract | [CVL](https://docs.certora.com/en/latest/) |
 | `certora-autoprover-solana` (alpha) | a Solana program, an Anchor or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
 
 <p align="center">
@@ -28,8 +28,8 @@ with a reason. No formal-verification expertise needed.
 
 ## Quick start (Solidity)
 
-- A Foundry or Hardhat project that builds, with `forge` or `node`, Java 19 or newer, and
-  [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- [uv](https://docs.astral.sh/uv/getting-started/installation/). The skill checks for the rest
+  of what it needs when it starts; [INSTALL.md](INSTALL.md) lists it.
 - A `CERTORAKEY`: if you don't have one yet, create it at
   [app.certora.com](https://app.certora.com), and tick "Use Certora Prover", "Create runs",
   "Read runs and results", "Cancel runs" and "Download artifacts".
@@ -101,9 +101,8 @@ The report sits next to the specs and configurations, ready to rerun.
 `certora-autoprover-solana` does the same for a Solana program: an Anchor or `solana-program`
 crate. It writes the properties as [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html)
 rules inside your crate, behind a `certora` cargo feature, and proves them with the Certora
-Solana Prover. It needs [uv](https://docs.astral.sh/uv/getting-started/installation/),
-[rustup](https://rustup.rs), a C compiler and a `CERTORAKEY`; it checks for the rest of the Rust
-and Solana toolchain and installs it with your go-ahead.
+Solana Prover. It needs [uv](https://docs.astral.sh/uv/getting-started/installation/)
+and a `CERTORAKEY`; it checks for the rest of what it needs and installs it with your go-ahead.
 
 ```sh
 claude plugin install certora-autoprover-solana@certora-skills
@@ -123,8 +122,7 @@ nonlinear arithmetic and/or external dependencies. An interrupted run resumes wh
 code it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
 prover job with its results.
 
-**What can it verify?** Solidity, in a Foundry or Hardhat project that builds: one main
-contract per run, together with the contracts it calls. And, in alpha, Solana programs: an
+**What can it verify?** Solidity, in a project that builds: one main contract per run, together with the contracts it calls. And, in alpha, Solana programs: an
 Anchor or `solana-program` crate.
 
 **What if a property is hard for formal verification?** The skill summarizes code the property
