@@ -26,7 +26,7 @@ with a reason. No formal-verification expertise needed.
 
 </div>
 
-## Quick start (Solidity)
+## Quick start
 
 - [uv](https://docs.astral.sh/uv/getting-started/installation/). The skill checks for the rest
   of what it needs when it starts; [INSTALL.md](INSTALL.md) lists it.
@@ -38,11 +38,12 @@ with a reason. No formal-verification expertise needed.
 export PATH="$HOME/.local/bin:$PATH"   # uv places its tools here
 export CERTORAKEY=...
 claude plugin marketplace add Certora/autoprover-skill
-claude plugin install certora-autoprover@certora-skills
+claude plugin install certora-autoprover@certora-skills          # Solidity contracts
+claude plugin install certora-autoprover-solana@certora-skills   # Solana programs (alpha)
 ```
 
-Add the two exports to your shell startup file and (re)start your agent; for other agents,
-updating and removing, see [INSTALL.md](INSTALL.md). Then point your agent at your project, and
+Install one or both. Add the two exports to your shell startup file and (re)start your agent;
+for other agents, updating and removing, see [INSTALL.md](INSTALL.md). Then point your agent at your project, and
 optionally at a design document:
 
 > Use certora-autoprover to verify `src/Vault.sol:Vault`. The design document is `docs/design.md`.
@@ -103,10 +104,6 @@ crate. It writes the properties as [CVLR](https://docs.certora.com/en/latest/doc
 rules inside your crate, behind a `certora` cargo feature, and proves them with the Certora
 Solana Prover. It needs [uv](https://docs.astral.sh/uv/getting-started/installation/)
 and a `CERTORAKEY`; it checks for the rest of what it needs and installs it with your go-ahead.
-
-```sh
-claude plugin install certora-autoprover-solana@certora-skills
-```
 
 > Use certora-autoprover-solana to verify the program in `programs/vault`.
 
