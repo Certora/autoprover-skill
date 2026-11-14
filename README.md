@@ -1,15 +1,19 @@
 <div align="center">
 
-# certora-autoprover
+# Certora AutoProver skills
 
-**Formal verification of your Solidity contract, without weeks of specialist work.**
+**Formal verification of your Solidity contracts and Solana programs, without weeks of specialist work.**
 
-An agent skill that derives your contract's security properties, writes them as
-[CVL](https://docs.certora.com/en/latest/) rules and invariants, and proves them with the
-[Certora Prover](https://docs.certora.com/en/latest/) for every input and every reachable
-state, not just the cases a test or fuzzer tries. Each property comes back verified, flagged as a
-suspected bug with a concrete counterexample, or reported as unresolved or skipped, with a
-reason. No CVL expertise needed.
+Agent skills that derive your code's security properties, write them as rules for the
+[Certora Prover](https://docs.certora.com/en/latest/), and prove them for every input and every
+reachable state, not just the cases a test or fuzzer tries. Each property comes back verified,
+flagged as a suspected bug with a concrete counterexample, or reported as unresolved or skipped,
+with a reason. No formal-verification expertise needed.
+
+| Skill | For | Rules written in |
+|---|---|---|
+| `certora-autoprover` | a Solidity contract, in a Foundry or Hardhat project | [CVL](https://docs.certora.com/en/latest/) |
+| `certora-autoprover-solana` (alpha) | a Solana program, an Anchor or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
@@ -22,7 +26,7 @@ reason. No CVL expertise needed.
 
 </div>
 
-## Quick start
+## Quick start (Solidity)
 
 - A Foundry or Hardhat project that builds, with `forge` or `node`, Java 19 or newer, and
   [uv](https://docs.astral.sh/uv/getting-started/installation/).
@@ -50,7 +54,7 @@ solvency: *the vault always holds enough assets to pay out every depositor.* You
 attack paths. The Prover searches every input, every caller and every reachable state for a
 sequence of calls that breaks the property, and either finds one or proves that none exists.
 
-Autoprover relieves you of writing the properties formally yourself. 
+Autoprover relieves you of writing the properties formally yourself.
 You write the properties in natural language, and Autoprover handles the technicalities,
 the edge cases, the configuration, and the iterative process, until your properties are either 
 proven or a bug is found.
@@ -74,10 +78,10 @@ proven or a bug is found.
 ## How it works
 
 1. **Analyze** the project: its components, entry points and the contracts it calls.
-2. **Set up** the prover with autosetup: compilers, contract links, and summaries, which are
-   equivalent models of library code the prover cannot handle as written.
+2. **Set up** the prover: compilers, contract links, and summaries, which are equivalent models
+   of library code the prover cannot handle as written.
 3. **Derive** security properties from the code and any design document.
-4. **Formalize** them as CVL rules and invariants.
+4. **Formalize** them as Prover rules and invariants: CVL for Solidity, CVLR for Solana.
 5. **Prove** them. Each counterexample is checked: a mistake in the spec or setup is fixed, and
    a real violation is reported as a suspected bug.
 
@@ -116,11 +120,12 @@ nonlinear arithmetic and/or external dependencies. An interrupted run resumes wh
 2,000 free minutes per month, then paid; see [app.certora.com](https://app.certora.com).
 
 **Where does my code go?** The prover runs in the Certora cloud, so each prover job uploads the
-contracts it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
+code it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
 prover job with its results.
 
-**What can it verify?** Solidity, in a Foundry or Hardhat project that builds. One main
-contract per run, together with the contracts it calls.
+**What can it verify?** Solidity, in a Foundry or Hardhat project that builds: one main
+contract per run, together with the contracts it calls. And, in alpha, Solana programs: an
+Anchor or `solana-program` crate.
 
 **What if a property is hard for formal verification?** The skill summarizes code the property
 does not depend on, splits the property, and can hand it to the hosted Timeout Resolver.
