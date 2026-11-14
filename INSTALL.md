@@ -4,7 +4,7 @@
 
 - For a Solidity contract: a Foundry or Hardhat project that builds, with `forge` or `node`, and
   Java 19 or newer.
-- For a Solana program (alpha): an Anchor or `solana-program` crate, [rustup](https://rustup.rs)
+- For a Solana program: an Anchor or `solana-program` crate, [rustup](https://rustup.rs)
   and a C compiler. The skill checks for the rest of the Rust and Solana toolchain and installs
   it with your go-ahead.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The skill installs its tools

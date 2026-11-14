@@ -13,7 +13,7 @@ with a reason. No formal-verification expertise needed.
 | Skill | For | Rules written in |
 |---|---|---|
 | `certora-autoprover` | a Solidity contract | [CVL](https://docs.certora.com/en/latest/) |
-| `certora-autoprover-solana` (alpha) | a Solana program, an Anchor or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
+| `certora-autoprover-solana` | a Solana program, an Anchor or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
@@ -39,7 +39,7 @@ export PATH="$HOME/.local/bin:$PATH"   # uv places its tools here
 export CERTORAKEY=...
 claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills          # Solidity contracts
-claude plugin install certora-autoprover-solana@certora-skills   # Solana programs (alpha)
+claude plugin install certora-autoprover-solana@certora-skills   # Solana programs
 ```
 
 Install one or both. Add the two exports to your shell startup file and (re)start your agent;
@@ -97,7 +97,7 @@ agent.
 
 The report sits next to the specs and configurations, ready to rerun.
 
-## Solana programs (alpha)
+## Solana programs
 
 `certora-autoprover-solana` does the same for a Solana program: an Anchor or `solana-program`
 crate. It writes the properties as [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html)
@@ -119,8 +119,8 @@ nonlinear arithmetic and/or external dependencies. An interrupted run resumes wh
 code it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
 prover job with its results.
 
-**What can it verify?** Solidity, in a project that builds: one main contract per run, together with the contracts it calls. And, in alpha, Solana programs: an
-Anchor or `solana-program` crate.
+**What can it verify?** Solidity, in a project that builds: one main contract per run,
+together with the contracts it calls. And Solana programs: an Anchor or `solana-program` crate.
 
 **What if a property is hard for formal verification?** The skill summarizes code the property
 does not depend on, splits the property, and can hand it to the hosted Timeout Resolver.
