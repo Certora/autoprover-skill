@@ -8,7 +8,7 @@ compatibility: >-
   Needs a CERTORAKEY for the Certora cloud prover and network access to prover.certora.com,
   crates.io, github.com and docs.certora.com. No model API key is needed.
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   author: certora
 ---
 
@@ -43,6 +43,7 @@ Every phase writes its result under the project's `certora/` directory, and the 
 |---|---|
 | `certora/analysis/application.json` | Phase 2 (component model) |
 | `certora/logs/setup.log`, and the edits it lists | Phase 3 (`certora-cvlr setup`) |
+| `certora/analysis/dependency_moves.json` | Phase 3, only when setup refused on dependency versions |
 | `certora/properties/<module>.properties.json` | Phase 4 |
 | `<package>/src/certora/specs/invariants.rs`, `invariant_rules.rs` | Phase 5 |
 | `<package>/src/certora/specs/<module>.rs`, `<package>/src/certora/summaries/<module>.txt`, `certora/properties/<module>.status.json`, `certora/properties/<module>.commentary.md`, `certora/properties/<module>.judge-round<N>.md` | Phase 6 |
@@ -92,7 +93,7 @@ Fail fast with a specific message rather than improvising around a broken enviro
   The first call builds the package, which takes a few minutes; later calls reuse the build. Before that first call, tell the user what will be built (`ai-composer` with `certora-cli`, from the AutoProver repository at the pinned commit) and ask for their go-ahead.
 - **The toolchain.** Run `certora-cvlr toolchain`. Every line must read `ok`. For a `MISSING` line with an `install:` command, show the user the commands and ask for their go-ahead, run them only after they agree, and run `toolchain` again. A `MISSING` line without one (rustup, a C compiler) is the user's to install: stop and tell them.
 - **`CERTORAKEY`** set (cloud prover). No model API key is needed: AutoProver makes no model call in this flow.
-- **The program.** The project builds with `cargo`, and the program is an Anchor program or a plain `solana-program` program whose package has a library target. Pinocchio programs and other frameworks are not supported yet. `setup` refuses a project on a Solana platform generation this AutoProver does not support, with the reason: stop and relay it.
+- **The program.** The project builds with `cargo`, and the program is an Anchor program or a plain `solana-program` program whose package has a library target. Pinocchio programs and other frameworks are not supported yet. `setup` refuses a project on a Solana platform generation this AutoProver does not support, or one that links two generations, with the reason. Many such projects verify after a change to their dependency versions alone: see *When setup refuses* in Phase 3.
 
 ## Phase 1 — Design document (optional but valuable)
 
@@ -127,7 +128,9 @@ Then read the end of its output:
 - **`reference:`** names the directory of the CVLR reference text for this project's versions. Read its `README.md` now: it says what each file holds, and how to read the parts written for AutoProver's own agents. Read `cvlr.md` before writing any rule. Below, `reference/` means that directory.
 - **The rule modules**, each with the features that compile it.
 
-Re-running `setup` is safe and changes nothing it already did. Every run must name **every** component: the list replaces the previous one, and a module file already written is kept. If setup refuses, read the reason and stop: it does not adapt a project it cannot verify.
+Re-running `setup` is safe and changes nothing it already did. Every run must name **every** component: the list replaces the previous one, and a module file already written is kept.
+
+**When setup refuses.** Read the reason. `setup` does not adapt a project it cannot verify, so any change is yours to propose and the user's to approve. A refusal over dependency versions (a Solana generation it does not support, two Solana generations in one build, a forked crate linked twice or at a version its fork does not cover) can often be cleared by moving the dependencies, with no change to the program's source. `references/dependency-moves.md`, beside this file, says how, and when it is not possible. Propose the move, wait for the user's go-ahead, record each edit in `certora/analysis/dependency_moves.json`, and run `setup` again. Any other refusal, or a move that file says is not possible: stop, and relay the reason.
 
 List the edits setup made in the Phase 7 report (`git diff` shows them, and `setup.log` names them).
 
@@ -238,7 +241,7 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Group the properties into audit-style sections — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked: a rule that exposed a genuine issue is a **finding** — describe the pre-state, the instruction and its impact for a human security reviewer; a rule marked only because of a prover limitation is NOT a bug — list it separately as a coverage gap.
 - Coverage and confidence: totals per outcome, and everything that limits confidence: sanity failures, every summary with its reason, every `optimistic_loop` with its reason, every bare `cvlr_assume!` that is not a proved invariant, and the functions the prover treated as external in verified rules. Name the property classes that produced no property for any component, with the one-line reason Phase 4 recorded.
-- The changes made to the user's crate: the edits `setup` made, and every edit to the program's source from `certora/analysis/source_edits.json`, with its reason.
+- The changes made to the user's crate: the edits `setup` made, every dependency move from `certora/analysis/dependency_moves.json`, and every edit to the program's source from `certora/analysis/source_edits.json`, each with its reason. A property proved after a dependency move is a property of the build with the moved dependencies. Say so next to the verdicts.
 - How to re-run: `certora-cvlr prove <project> --component <module>` for each component, with the settings each one needs.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover jobs.
