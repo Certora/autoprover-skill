@@ -22,6 +22,7 @@ with a reason. No formal-verification expertise needed.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
+  <a href="https://x.com/certora"><img src="https://img.shields.io/twitter/follow/certora?style=social" alt="Follow @certora"></a>
 </p>
 
 </div>
