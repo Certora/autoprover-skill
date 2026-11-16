@@ -118,6 +118,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
   ```
 
   What the default costs: autosetup automatically applies prover-performance summaries only to a fixed curated list of complex library functions. Richer summaries that are specific to particular input protocols need a paid Anthropic key and a run without `--skip-llm`. That is the user's call and their money: tell them the option exists, and leave the key and the flag to them.
+- The prover budget of this run (*Prover budget* in Phase 6). If `certora/logs/budget.json` does not exist, write it: `{"jobs": 500, "minutes": 5000}`, or the numbers the user gave. On resume, keep the file as it is. Tell the user the budget.
 - Java 19+ on PATH (`java -version`). autosetup shells out to the `ASTExtraction.jar` typechecker while resolving summaries and there is no fallback path, so an old or absent JDK fails mid-run rather than at startup.
 - A compiler manager, and a way to read a project's build plan. `solc-select` on PATH (`uv tool install solc-select==1.2.0` when it is not, after the same go-ahead), plus `forge` when the target project has a `foundry.toml`, or `node` when it has a `hardhat.config.*`. No version is named here: which compilers a project needs is a property of that project, so Phase 3 derives it from the project's own build configuration and installs what it resolves to.
 
@@ -271,7 +272,7 @@ Autosetup already ran every external method through the prover, and Phase 4 now 
 
    Summarize only functions that change no state: `pure` functions, and `view` functions. Never summarize a function that writes storage, transfers value or calls out to change state; a summary of one hides the very effects the properties check. A `view` function reads state, so its summary must depend on that state: pass the storage it reads into the summary (as arguments, or through ghosts that mirror it), never treat it as a function of its arguments alone. A summary that drops the state it reads lets the prover pick results the real code can never return.
 5. **Summarize that function, soundly.** Write a summary for it in `certora/specs/summaries/<Main>_difficulty_summaries.spec`: an exact CVL version over `mathint` that the prover reasons about more easily, or an uninterpreted function with only the facts the properties need (bounds, monotonicity, rounding direction). For each summary, write a rule in `certora/specs/summary-soundness.spec` that shows the real code satisfies it: the real function, called through a harness when it is internal, gives the result the summary gives, or has each fact the summary assumes. Its conf `certora/confs/summary-soundness.conf` is the setup base without the new summaries. Consult the docs pages for summaries and ghost functions rather than guessing (`references/cvl-writing.md`).
-6. **Check that the summaries help.** Typecheck, then run sanity on each selected method on its own, with the summaries imported, all detached and in parallel, each bounded by `--global_timeout 600`: `certoraRun <conf> --rule sanity --method '<signature>' --global_timeout 600 --wait_for_results all --msg "difficulty: <method>"`. Keep a summary only if the method's sanity instance now passes faster than before. Record the before and after times in `method_difficulty.json`.
+6. **Check that the summaries help.** Typecheck, then run sanity on each selected method on its own, with the summaries imported, all detached and in parallel, each bounded by `--global_timeout 600`, with each run's output in its own log under `certora/logs/`, since these jobs count toward the run's budget (*Prover budget* in Phase 6): `certoraRun <conf> --rule sanity --method '<signature>' --global_timeout 600 --wait_for_results all --msg "difficulty: <method>"`. Keep a summary only if the method's sanity instance now passes faster than before. Record the before and after times in `method_difficulty.json`.
 
 Do not wait in this phase for the soundness rules to be proven: they can take long, and that is Phase 6's work. They go into Phase 6 as one more unit, `summary-soundness`, generated, judged and gated like the others. A spec that imports `<Main>_difficulty_summaries.spec` relies on those summaries the way it relies on an invariant: it closes only when their soundness rules are VERIFIED.
 
@@ -343,6 +344,64 @@ A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-con
 ### Per-unit round cap / deadlock
 
 If the judge keeps demanding a change that then makes the prover fail (or vice versa), a unit can ping-pong forever. Cap it at ~3 gen↔judge rounds without that unit converging. On hitting the cap, close it: keep the most defensible spec, and either record the offending property as skipped with the conflict documented, or mark the rule expected-to-fail with the reason. Cloud runs are expensive — an unbounded cycle is a failure mode, not diligence. A unit the barrier or an invariant change reopened starts a fresh count, because its earlier rounds did converge. If it reaches the cap again, close it the same way, and say in the report what reopened it.
+
+### Prover budget
+
+A skill run has a fixed prover budget: by default **500 prover jobs and 5000 prover minutes**, set in Phase 0 and stored in `certora/logs/budget.json`. Minutes are what the run costs: each job's runtime on the server, rounded up to whole minutes. Nothing stops a submission past the budget except you: never submit a job that does not fit what is left, and spread the budget so that every unit gets a fair share and no single hard property drains it.
+
+The budget is counted from the files the run already writes. Every job's link is in its log under `certora/logs/`, and every finished part's report, saved by *Reading results* in `references/prover-loop.md`, holds its runtime. A job whose report is not saved yet counts as 30 minutes, the job cap. This prints what is used, what is left, and the use per unit, taken from the log names (`<slug>-p<K>_run<N>.log` belongs to unit `<slug>`):
+
+```bash
+"$(uv tool dir)"/ai-composer/bin/python - <<'EOF'
+import glob, json, math, os, re
+L = "certora/logs"
+budget = json.load(open(f"{L}/budget.json"))
+link = re.compile(r"jobs/([0-9a-f-]{36})|output/[0-9]+/([0-9a-f]{32})")
+ran = {}
+for f in glob.glob(f"{L}/*.report.json"):
+    r = json.load(open(f))
+    if r.get("job_url") and r.get("duration") is not None:
+        ran[r["job_url"].rsplit("/", 1)[-1].replace("-", "")] = math.ceil(r["duration"] / 60)
+jobs, units = {}, {}
+for f in sorted(glob.glob(f"{L}/*.log")):
+    unit = re.sub(r"(-p\d+)?(_\w*run\d+)?$", "", os.path.basename(f)[:-4])
+    for a, b in link.findall(open(f, errors="replace").read()):
+        jid = (a or b).replace("-", "")
+        if jid not in jobs:
+            jobs[jid] = ran.get(jid, 30)
+            u = units.setdefault(unit, [0, 0]); u[0] += 1; u[1] += jobs[jid]
+used = [len(jobs), sum(jobs.values())]
+print(f"budget {budget['jobs']} jobs, {budget['minutes']} min")
+print(f"used   {used[0]} jobs, {used[1]} min ({sum(1 for j in jobs if j not in ran)} without a report, counted at 30 min)")
+print(f"left   {budget['jobs'] - used[0]} jobs, {budget['minutes'] - used[1]} min")
+for unit, (n, m) in sorted(units.items(), key=lambda x: -x[1][1]):
+    print(f"  {unit:44} {n:4} jobs {m:6} min")
+EOF
+```
+
+Run it at these points and write the numbers, with what you decided from them, into `certora/logs/budget.md`:
+
+1. **After Phase 3** (setup and sanity) and **after Phase 5** (method difficulty). These phases cost roughly the same on every run; if they took more than a quarter of the budget, say so to the user before Phase 6.
+2. **Before each round's Generate.** Split what is left among the open units, keeping back a tenth for the barrier:
+   - **Round 1:** spend at most half of what is left, so rounds 2 and 3 still have room.
+   - **Later rounds:** spend what is left, less the barrier's tenth.
+   - **Weighting:** weight each unit by its open properties or invariants, and by their rank when the input lists carry one. Give no unit less than one full run of its spec.
+   - **The brief:** put each unit's allowance, in jobs and minutes, into its generator's brief.
+3. **At the barrier, before judging.** Compare each unit's use with its allowance and say which overran and why. Then estimate the next round from this round's spend per unit.
+   - **If it does not fit,** regenerate only the units where it buys the most: rejected for a fixable reason, or with high-ranked properties still unresolved.
+   - **Close the others now** on their latest full run, under the deadlock rule.
+4. **Before Phase 7.** Write the final use per unit and in total. The report states it.
+
+The generator works inside its allowance:
+- **Check every submission.** Before each one, run the count above. Submit only if what is left of the run, and of your unit's allowance, covers the parts at one job and 30 minutes each. Keep enough of the allowance for the final full run.
+- **Spend cheaply.**
+  - Use the fewest parts that fit the limits.
+  - Iterate with one rule-filtered job that holds only the rules that failed or changed.
+  - Submit at most two full runs per round.
+- **No single property drains the budget.** A property may use at most a quarter of its unit's allowance. A rule that has timed out twice is closed: expected-to-fail as a prover limitation, with what was tried. It is not tried a third time. A hard property is recorded and left; it is not chased.
+- **When the allowance or the budget runs out,** stop submitting. Hand over the latest results, with every rule that has no verdict listed as not proven because of the budget, never as verified.
+
+When what is left of the run no longer covers one more job, nobody submits again. Read the jobs still in flight, close every open unit on its latest full run, and write the report. A Timeout Resolver call runs prover jobs this count cannot see: make at most 3 per run, and record each in `certora/logs/budget.md`.
 
 ### Completion (per unit)
 
