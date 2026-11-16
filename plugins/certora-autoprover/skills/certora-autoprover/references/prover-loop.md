@@ -31,7 +31,7 @@ Never hand-roll a conf — start from the autosetup base (`certora/confs/<Main>.
 
 Each job can take up to 30 minutes (`"global_timeout": 1800` caps it), longer than a single foreground command should hold your session. Aim for far less: see *Keep each run under about 30 minutes* below.
 
-With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. Start the submission detached, with each part's output in its own log:
+With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Start the submission detached, with each part's output in its own log:
 
 ```bash
 cd <project_root>
@@ -58,7 +58,7 @@ check() {
     else echo "$p - NOT_SUBMITTED"; fi
   done
 }
-done_re=' (SUCCEEDED|FAILED|HALTED|NOT_SUBMITTED)$'
+done_re=' (SUCCEEDED|FAILED|HALTED|CANCELED|SERVICE_UNAVAILABLE|UPLOAD_FAILED|NOT_SUBMITTED)$'
 while check | grep -vqE "$done_re" && [ "$(date +%s)" -lt "$end" ]; do sleep 30; done
 out=$(check); echo "$out"
 if echo "$out" | grep -vqE "$done_re"; then echo RUNNING; else echo ENDED; fi
@@ -95,7 +95,7 @@ Ask the data API with `CERTORAKEY`, through the `prover-cli` that ships with aut
 "$(uv tool dir)"/ai-composer/bin/prover-cli --job-id <job> --status-only --format json
 ```
 
-`SUCCEEDED` means the job finished and its verdicts are final. `FAILED` and `HALTED` (for example the `global_timeout` limit) mean it ended without a full result. Any other status means it is still queued or running. If the command fails, the check failed: do not read it as "still running". `--full-report --format text` also prints the verdict counts.
+`SUCCEEDED` means the job finished and its verdicts are final. `FAILED`, `HALTED` (for example the `global_timeout` limit), `CANCELED`, `SERVICE_UNAVAILABLE` and `UPLOAD_FAILED` mean it ended without a full result. Any other status means it is still queued or running. If the command fails, the check failed: do not read it as "still running". `--full-report --format text` also prints the verdict counts.
 
 ### Keep each run under about 30 minutes
 
