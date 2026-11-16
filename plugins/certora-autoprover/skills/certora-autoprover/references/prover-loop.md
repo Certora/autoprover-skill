@@ -126,6 +126,7 @@ For per-rule statuses and counterexamples:
      ```bash
      "$(uv tool dir)"/ai-composer/bin/python -c '
      import json, os, subprocess, sys, tempfile
+     from collections import Counter
      from composer.prover.results import counterexample, trace_shape
      job, out = sys.argv[1], sys.argv[2]
      cli = os.path.join(os.path.dirname(sys.executable), "prover-cli")
@@ -136,21 +137,28 @@ For per-rule statuses and counterexamples:
      report = fetch("--full-report")["report"]
      json.dump(report, open(out, "w"), indent=1)
      print("job", report["job_status"])
-     roots = [r for rules in report["rules"].values() for r in rules if r["node_type"] == "ROOT"]
-     for r in roots:
-         print(r["rule_id"], r["status"], sep="\t")
+     checks = fetch("--leaf-checks")["checks"]
+     rules = {}
+     for c in checks:
+         rules.setdefault(c["rule_name"], []).append(c)
+     for rule, leaves in rules.items():
+         counts = Counter(c["status"] for c in leaves)
+         print(rule, ", ".join(f"{s} {n}" for s, n in counts.most_common()), sep="\t")
+         for c in leaves:
+             if c["status"] != "VERIFIED" and c["method_name"]:
+                 print("", c["method_name"], c["status"], sep="\t")
      seen = set()
-     for r in roots:
-         for name in r["output_files"] if r["status"] == "VIOLATED" else []:
+     for c in checks:
+         for name in c["output_files"] if c["status"] == "VIOLATED" else []:
              if name not in seen:
                  seen.add(name)
                  cex = counterexample(fetch("--calltrace", name)["calltrace"], trace_shape("evm"))
                  if cex:
-                     print("\n==", r["rule_id"]); print(cex.render())
+                     print("\n==", c["rule_name"], c["method_name"] or ""); print(cex.render())
      ' <job_id> certora/logs/<slug>-p<K>_run<N>.report.json
      ```
 
-     It prints one line per rule, and one per method for a parametric rule or invariant (`rule-method(args)`): rule and status. After them it prints each violated one's counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped. The full report, with timeouts, errors, alerts and call resolutions, is saved next to the logs.
+     The statuses come from `prover-cli --leaf-checks`: the prover's own verdicts per method of a parametric rule or invariant, and per assert. A rule's top-level status is only a summary of them. It can read ERROR while a method is VIOLATED, or VIOLATED while other methods are SANITY_FAILED, and it carries no counterexample. The script prints one line per rule with its leaf statuses counted, then a line for each method that is not VERIFIED. After them it prints each violated one's counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped. The full report, with timeouts, errors, alerts and call resolutions, is saved next to the logs.
 
      When you need more than this prints, ask for that one thing: `prover-cli --job-id <job_id> --calltrace rule_output_<k>.json --format json -o <file>` gives a rule's raw output (`assertMessage`, `jumpToDefinition`, the `callTrace` tree, `variables`; each rule's `output_files` in the full report names its file), `--alerts` the alert report, `--download-sources <dir>` the sources the job ran on, file by file.
 
