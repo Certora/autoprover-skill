@@ -49,6 +49,8 @@ Every phase writes its result under the project's `certora/` directory, and the 
 | `<package>/src/certora/specs/<module>.rs`, `<package>/src/certora/summaries/<module>.txt`, `certora/properties/<module>.status.json`, `certora/properties/<module>.commentary.md`, `certora/properties/<module>.judge-round<N>.md` | Phase 6 |
 | `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
 
+On a resumed run, re-run `setup` naming every component before reusing anything: it is safe, and it refreshes what `certora-cvlr` writes into the project (the Prover summaries `prove` composes, and `reference/`), which an upgrade of this skill changes.
+
 `<module>` is a component's rule module name: snake_case, a valid Rust module name, unique in the program. It names the component everywhere, including its artifacts.
 
 Create the artifact directories up front: `mkdir -p certora/analysis certora/properties certora/report certora/logs`.
