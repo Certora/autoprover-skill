@@ -1,6 +1,6 @@
 ---
 name: certora-autoprover-solana
-description: End-to-end formal verification of a Solana program with the Certora Solana Prover. Given an Anchor or solana-program crate, this skill analyzes the program's instructions and accounts, scaffolds a CVLR harness into the crate behind a cargo feature, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them as CVLR rules, and iterates the prover until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report. Use this whenever the user wants to formally verify a Solana program, prove properties about an Anchor program, or write and check CVLR rules — e.g. "formally verify programs/vault", "come up with properties for this Solana program and prove them", "write CVLR rules for the deposit instruction". Also use it when the user asks to "audit this Solana program with the prover" or wants machine-checked guarantees rather than a manual review.
+description: End-to-end formal verification of a Solana program with the Certora Solana Prover. Given an Anchor, Pinocchio, jiminy or solana-program crate, this skill analyzes the program's instructions and accounts, scaffolds a CVLR harness into the crate behind a cargo feature, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them as CVLR rules, and iterates the prover until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report. Use this whenever the user wants to formally verify a Solana program, prove properties about an Anchor program, or write and check CVLR rules — e.g. "formally verify programs/vault", "come up with properties for this Solana program and prove them", "write CVLR rules for the deposit instruction". Also use it when the user asks to "audit this Solana program with the prover" or wants machine-checked guarantees rather than a manual review.
 license: GPL-3.0-only
 compatibility: >-
   Requires uv, rustup and a C compiler; the skill checks for and, with the user's go-ahead,
@@ -8,7 +8,7 @@ compatibility: >-
   Needs a CERTORAKEY for the Certora cloud prover and network access to prover.certora.com,
   crates.io, github.com and docs.certora.com. No model API key is needed.
 metadata:
-  version: "0.1.2"
+  version: "0.2.0"
   author: certora
 ---
 
@@ -93,7 +93,7 @@ Fail fast with a specific message rather than improvising around a broken enviro
   The first call builds the package, which takes a few minutes; later calls reuse the build. Before that first call, tell the user what will be built (`ai-composer` with `certora-cli`, from the AutoProver repository at the pinned commit) and ask for their go-ahead.
 - **The toolchain.** Run `certora-cvlr toolchain`. Every line must read `ok`. For a `MISSING` line with an `install:` command, show the user the commands and ask for their go-ahead, run them only after they agree, and run `toolchain` again. A `MISSING` line without one (rustup, a C compiler) is the user's to install: stop and tell them.
 - **`CERTORAKEY`** set (cloud prover). No model API key is needed: AutoProver makes no model call in this flow.
-- **The program.** The project builds with `cargo`, and the program is an Anchor program or a plain `solana-program` program whose package has a library target. Pinocchio programs and other frameworks are not supported yet. `setup` refuses a project on a Solana platform generation this AutoProver does not support, or one that links two generations, with the reason. Many such projects verify after a change to their dependency versions alone: see *When setup refuses* in Phase 3.
+- **The program.** The project builds with `cargo`, and the program's package has a library target and is an Anchor, Pinocchio (0.8 to 0.12), jiminy or plain `solana-program` program. Other frameworks are not supported yet. `setup` refuses a project on a Solana platform generation this AutoProver does not support, or one that links two generations, with the reason. Many such projects verify after a change to their dependency versions alone: see *When setup refuses* in Phase 3.
 
 ## Phase 1 — Design document (optional but valuable)
 
@@ -121,7 +121,7 @@ Run, from anywhere:
 certora-cvlr setup <project> --component <module> [--component <module> ...] 2>&1 | tee certora/logs/setup.log
 ```
 
-It edits the program's crate, and reports every edit: a `certora` cargo feature and the CVLR dependencies, Certora's fork of `anchor-lang` (crates.io Anchor cannot be verified), a `#[cfg(feature = "certora")] mod certora;` line, and `src/certora/` with the harness root, the prover's tuning files and one rule module per component behind a feature of its own. It also declares two modules of its own, `invariants` and `invariant_rules` (Phase 5), and compiles the result. Nothing it adds is compiled into the program unless the `certora` feature is on.
+It edits the program's crate, and reports every edit: a `certora` cargo feature and the CVLR dependencies, Certora's fork of `anchor-lang` on an Anchor program (crates.io Anchor cannot be verified), a `#[cfg(feature = "certora")] mod certora;` line, and `src/certora/` with the harness root, the prover's tuning files and one rule module per component behind a feature of its own. On a Pinocchio or jiminy program it also writes the module that builds that framework's accounts for a rule (`src/certora/pinocchio.rs` or `jiminy.rs`), and on a `no_std` program it gates `#![no_std]` and the program's panic handler off under the `certora` feature, since CVLR links `std`. It also declares two modules of its own, `invariants` and `invariant_rules` (Phase 5), and compiles the result. Nothing it adds is compiled into the program unless the `certora` feature is on.
 
 Then read the end of its output:
 
@@ -204,17 +204,18 @@ Say plainly to the user that you are in sequential mode, because self-review is 
 
 ### Generator procedure
 
-Read `reference/cvlr.md` before the first rule, and `reference/author.md` by section as questions come up: it is what AutoProver's own rule author works from, and its sections answer most first-draft questions (reaching an Anchor handler, the loop ladder, a bounded stand-in for a computation that will not finish, when a rule should fail). `reference/README.md` translates the tools it names. Check what exists in the CVLR crates' own source rather than guessing a helper.
+Read `reference/cvlr.md` before the first rule, and `reference/author.md` by section as questions come up: it is what AutoProver's own rule author works from, and its sections answer most first-draft questions (reaching a handler on this program's framework, the loop ladder, a bounded stand-in for a computation that will not finish, when a rule should fail). `reference/recipes/index.md` lists situations by trigger, each with its fix in `reference/recipes/<id>.md`; match a trigger before improvising. `reference/README.md` translates the tools both name. Check what exists in the CVLR crates' own source rather than guessing a helper.
 
 - Give each property its own rule(s), formalized in the **"VERIFIED = good"** direction. Call the instruction handler, never the program's entrypoint or dispatcher.
 - Write the strict property. A rule that permits a loss, a rounding error or any other tolerance must name the source of its bound: the design document, a comment in the code, or the property itself.
 - Assume shared invariants from `invariants.rs`; never restate one locally. If you need one that is not there, write a request.
 - After every edit: `certora-cvlr check <project> --component <module>`, until it prints `ok`.
 - Then `certora-cvlr prove <project> --component <module>`, and `wait` for it. `prove` prints the rules the job checks; a rule you wrote and it does not list is not a rule (a missing `#[rule]`, or a module the feature does not compile).
-- For each rule not VERIFIED, read the report `wait` prints and act:
+- For each rule not VERIFIED, read the report `wait` prints and act. When it ends by naming recipes, read each one before you change anything: they are what AutoProver hands its own rule author on the same result.
   - **VIOLATED**: read the counterexample. A starting state no instruction can produce is a missing invariant: request one. A rule that asserted something the property does not say is a rule bug: fix it. A real violation of the property is a finding: mark it **expected-to-fail** with the reason `genuine issue`, a description of the pre-state and the call, and keep the rule as it is. Never weaken a rule until it passes.
   - **SANITY_FAILED** (vacuous): `certora-cvlr prove <project> --component <module> --rule <rule> --unsat-core`, `wait`, then `certora-cvlr vacuity <link> --rule <rule>`, and read the core as `reference/vacuity.md` says. When the assertion is in the core, weakening the assumptions is not the fix.
-  - **TIMEOUT**, or an unwinding failure on a loop: `reference/author.md` has the ladder. Bound the inputs that set the trip count first, then stand in for the computation, then raise `--loop-iter`; `--optimistic-loop "<why>"` is unsound and last.
+  - An unwinding failure on a loop: `reference/author.md` has the ladder. Bound the inputs that set the trip count first, then stand in for the computation, then raise `--loop-iter`; `--optimistic-loop "<why>"` is unsound and last.
+  - **TIMEOUT**: recipe K8. The statistics `wait` prints under the verdicts name the functions that held the rule's time; a stand-in for the one that dominates is usually the fix. After three jobs in a row with a timed-out rule, stop restating the timed-out rules: renaming, splitting or dropping a conjunct does not change what a rule runs over, and each of those jobs runs to the time limit. Change what is under the rule (a stand-in for the function the statistics name), drop a handler-level rule whose fact a rule on the program's accounting function already proves and say how the two connect, or skip the property and cite the timed-out jobs. A job that **halted**, with no verdicts or with every unfinished rule cut off, is recipe K9: find the rule that halts it before resubmitting the rest.
   - A pointer-analysis failure that names a function the property does not depend on: summarize it in `<package>/src/certora/summaries/<module>.txt`, each directive with `;` lines saying why it is sound here. `prove` composes the file into the job and says which directives match nothing.
   - The notes `wait` prints after the verdicts about functions treated as external are not a failure, but read them: a verified rule over an external call proved less than it seems.
   - A property no rule can express, after a real attempt: **skip** it, with the reason. A reason that blames the prover cites the job that showed it.

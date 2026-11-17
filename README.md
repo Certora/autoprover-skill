@@ -13,12 +13,12 @@ with a reason. No formal-verification expertise needed.
 | Skill | For | Rules written in |
 |---|---|---|
 | `certora-autoprover` | a Solidity contract | [CVL](https://docs.certora.com/en/latest/) |
-| `certora-autoprover-solana` | a Solana program, an Anchor or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
+| `certora-autoprover-solana` | a Solana program, an Anchor, Pinocchio, jiminy or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
   <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.6.8-blue?style=flat" alt="version 0.6.8"></a>
-  <a href="plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md"><img src="https://img.shields.io/badge/version-0.1.2-blue?style=flat" alt="Solana version 0.1.2"></a>
+  <a href="plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md"><img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat" alt="Solana version 0.2.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
@@ -100,9 +100,9 @@ The report sits next to the specs and configurations, ready to rerun.
 
 ## Solana programs
 
-`certora-autoprover-solana` does the same for a Solana program: an Anchor or `solana-program`
-crate. It writes the properties as [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html)
-rules inside your crate, behind a `certora` cargo feature, and proves them with the Certora
+`certora-autoprover-solana` does the same for a Solana program: an Anchor, Pinocchio, jiminy
+or `solana-program` crate. It writes the properties as
+[CVLR](https://docs.certora.com/en/latest/docs/solana/index.html) rules inside your crate, behind a `certora` cargo feature, and proves them with the Certora
 Solana Prover. It needs [uv](https://docs.astral.sh/uv/getting-started/installation/)
 and a `CERTORAKEY`; it checks for the rest of what it needs and installs it with your go-ahead.
 
@@ -121,7 +121,7 @@ code it verifies. Your dashboard on [app.certora.com](https://app.certora.com) s
 prover job with its results.
 
 **What can it verify?** Solidity, in a project that builds: one main contract per run,
-together with the contracts it calls. And Solana programs: an Anchor or `solana-program` crate.
+together with the contracts it calls. And Solana programs: an Anchor, Pinocchio, jiminy or `solana-program` crate.
 
 **What if a property is hard for formal verification?** The skill summarizes code the property
 does not depend on, splits the property, and can hand it to the hosted Timeout Resolver.
