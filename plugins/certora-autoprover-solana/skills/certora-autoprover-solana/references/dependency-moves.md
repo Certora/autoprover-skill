@@ -118,10 +118,15 @@ is a dependency move too: apply it with the same steps and record it.
 
 Stop, tell the user, and do not continue to Phase 4, in these cases:
 
-- The program, or a git dependency it links, uses Anchor 0.28 or older. These Anchor releases
-  require `solana-program` below 1.17, and Certora's Anchor forks for them have the same cap.
-  Reaching 1.18 means porting the program to Anchor 0.29 or newer, which is a change to its
-  source, not to its dependencies.
+- The program, or a git dependency it links, uses Anchor 0.28. Anchor 0.28 requires
+  `solana-program` `>=1.14, <1.17`, and Certora's fork of it has the same requirement. Reaching
+  1.18 means porting the program to Anchor 0.29 or newer, which is a change to its source, not to
+  its dependencies.
+- The program uses Anchor older than 0.26. Certora's Anchor fork has no release before 0.26.
+
+Anchor 0.26 and 0.27 are not on this list. Their requirements (`"1.13.5"` and `"1.14.16"`) are
+caret ranges that cargo resolves to 1.18, so move them like any other dependency. If the build
+then fails inside `anchor-lang` itself, treat it as the 0.28 case.
 - A dev-dependency pins an old Solana exactly (an SDK or a test client crate). Cargo resolves
   dev-dependencies into the same lock, so the pin blocks the move although the program does not
   link it. Ask the user whether to remove that dev-dependency for verification. If they agree,
