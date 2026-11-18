@@ -18,6 +18,7 @@ From the target project root:
 nohup certora-autosetup \
   --main-contract src/Vault.sol:Vault \
   src/Vault.sol:Vault src/Escrow.sol:Escrow ... --no-strip-contracts \
+  --extra-args "--group_id <group_id>" \
   > certora/logs/autosetup.log 2>&1 &
 echo $! > certora/logs/autosetup.pid
 # follow with: tail -n 20 certora/logs/autosetup.log
@@ -46,7 +47,7 @@ Machine-readable alternative: add `--composer-setup out.json` — it writes `{"c
 
 1. Exit code 0 and `certora/confs/<Main>.conf` exists.
 2. Skim the log tail for the sanity summary; a method failing sanity means specs touching it will misbehave (rules on it come back vacuous or erroring). Investigate — usually an unresolved call or too-low bounds — before writing CVL.
-3. `certoraRun certora/confs/<Main>.conf --wait_for_results all` re-runs the sanity spec any time you want to re-validate the setup (the base conf sets `wait_for_results: none`, so without the override it submits and returns immediately with no verdicts).
+3. `certoraRun certora/confs/<Main>.conf --group_id <group_id> --wait_for_results all` re-runs the sanity spec any time you want to re-validate the setup (the base conf sets `wait_for_results: none`, so without the override it submits and returns immediately with no verdicts).
 
 ## Failure modes
 
