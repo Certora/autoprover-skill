@@ -41,32 +41,30 @@ echo $! > certora/logs/<slug>_run<N>.pid
 
 ### Waiting for a run
 
-Wait in the foreground, with a bounded loop that asks the server for each part's job (*Checking a job on the server* below). One call of it:
+Wait in the foreground, in two steps, each a bounded call repeated until it ends.
 
-```bash
-cd <project_root>
-cli="$(uv tool dir)"/ai-composer/bin/prover-cli
-end=$(( $(date +%s) + 90 ))       # stay under the timeout of this call, see below
-check() {
-  for c in certora/confs/<slug>-p*.conf; do
-    p=$(basename "$c" .conf); log=certora/logs/${p}_run<N>.log
-    job=$(grep -oE 'jobs/[0-9a-f-]{36}|output/[0-9]+/[0-9a-f]{32}' "$log" 2>/dev/null | tail -1 | sed 's#.*/##')
-    if [ -n "$job" ]; then
-      s=$("$cli" --job-id "$job" --status-only --format json 2>/dev/null | sed -nE 's/.*"status": *"([A-Z_]+)".*/\1/p')
-      echo "$p $job ${s:-CHECK_FAILED}"
-    elif kill -0 "$(cat certora/logs/<slug>_run<N>.pid)" 2>/dev/null; then echo "$p - SUBMITTING"
-    else echo "$p - NOT_SUBMITTED"; fi
-  done
-}
-done_re=' (SUCCEEDED|FAILED|HALTED|CANCELED|SERVICE_UNAVAILABLE|UPLOAD_FAILED|NOT_SUBMITTED)$'
-while check | grep -vqE "$done_re" && [ "$(date +%s)" -lt "$end" ]; do sleep 30; done
-out=$(check); echo "$out"
-if echo "$out" | grep -vqE "$done_re"; then echo RUNNING; else echo ENDED; fi
-```
+1. **Until every part is submitted.** Wait for the submission (`<name>` is `<slug>_run<N>`) with the bounded loop in SKILL.md (*Inputs, artifacts, resume*), until it prints `ENDED`. Then read each part's job link from its log:
 
-It prints one line per part: the part, its job id and the job's status. If it prints `RUNNING`, write a one-line progress note (elapsed time and the parts still open) and run the same call again. Repeat until it prints `ENDED`, then read the results (*Reading results*, method 2). `NOT_SUBMITTED` means that part's certoraRun ended without a job: read its log for the compile, typecheck or upload error, fix it and submit that part again. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the loop going, and if it persists, run the `prover-cli` command by hand to see the error.
+   ```bash
+   cd <project_root>
+   for log in certora/logs/<slug>-p*_run<N>.log; do
+     echo "$log $(grep -oE 'https://[^ ]*(jobs/[0-9a-fA-F-]{36}|output/[0-9]+/[0-9a-fA-F]{32})[^ ]*' "$log" | tail -1)"
+   done
+   ```
 
-The bound must stay under the timeout of the call that runs the loop. Shell tools often stop a call after 2 minutes by default, and some then move it to the background and promise a notice when it ends. That is the wake-up wait this section forbids. The bound of 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set the bound about 2 minutes under it. Claude Code's shell tool, for example, defaults to 120 seconds and accepts up to `timeout: 600000` (10 minutes) per call, which fits a bound of 480. If you cannot set the timeout per call, keep 90.
+   A part without a link was not submitted: its log holds the compile, typecheck or upload error. Fix it and submit that part again.
+
+2. **Until every job has stopped.** Ask the server for the parts' jobs, by their links:
+
+   ```bash
+   "$(uv tool dir)"/ai-composer/bin/prover-cli --wait <link> <link> ... --timeout 90
+   ```
+
+   It checks every 30 seconds and prints one line per job with its status, then `ENDED` once every job has stopped, or `RUNNING` when the 90 seconds are up first. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the wait going, and if it persists, run *Checking a job on the server* by hand to see the error. When it prints `ENDED`, read the results (*Reading results*, method 2).
+
+After every call that prints `RUNNING`, write a one-line progress note (elapsed time and the parts still open) and run the same call again.
+
+`--timeout` must stay under the timeout of the call that runs it. Shell tools often stop a call after 2 minutes by default, and some then move it to the background and promise a notice when it ends. That is the wake-up wait this section forbids. 90 seconds fits a 2-minute timeout. To wait longer per call, pass a longer timeout on every wait call and set `--timeout` about 2 minutes under it. Claude Code's shell tool, for example, defaults to 120 seconds and accepts up to `timeout: 600000` (10 minutes) per call, which fits `--timeout 480`. If you cannot set the timeout per call, keep 90.
 
 Do not wait any other way:
 
@@ -118,64 +116,25 @@ Statuses per rule: `VERIFIED`, `VIOLATED`, `TIMEOUT`, `SANITY_FAILED`, `SKIPPED`
 For per-rule statuses and counterexamples:
 
 1. **Web report** (preferred for a human): the printed report link → rule tree → call trace.
-2. **Programmatic**: ask the data API for the results, one piece at a time, through the `prover-cli` that ships with autosetup. Never download the job's output archive: it unpacks to several GB per job and fills the disk.
+2. **Programmatic**: ask the data API for the results through the `prover-cli` that ships with autosetup. Never download the job's output archive: it unpacks to several GB per job and fills the disk.
 
-   - The job id: certoraRun records every job it submits in `.certora_internal/.certora_recent_jobs.json`, under the project's path, one entry per job with its `job_id` and `notify_msg` (the run's `--msg`). Take the entry for each part of this run. The parts run in parallel, so match on each part's `--msg`.
-   - Once the job is `SUCCEEDED`, read its statuses and counterexamples:
+   - Each part's job link is in its log (*Waiting for a run*, step 1). `--job-url <link>` and `--job-id <id>` both work.
+   - Once the job has ended, read its verdicts and counterexamples, and save the full report next to the part's log:
 
      ```bash
-     "$(uv tool dir)"/ai-composer/bin/python -c '
-     import json, os, subprocess, sys, tempfile
-     from collections import Counter
-     from composer.prover.results import counterexample, trace_shape
-     job, out = sys.argv[1], sys.argv[2]
-     cli = os.path.join(os.path.dirname(sys.executable), "prover-cli")
-     def fetch(*args):
-         with tempfile.NamedTemporaryFile(suffix=".json") as f:
-             subprocess.run([cli, "--job-id", job, *args, "--format", "json", "-o", f.name], check=True, capture_output=True)
-             return json.load(open(f.name))
-     report = fetch("--full-report")["report"]
-     json.dump(report, open(out, "w"), indent=1)
-     print("job", report["job_status"])
-     checks = fetch("--leaf-checks")["checks"]
-     rules = {}
-     for c in checks:
-         rules.setdefault(c["rule_name"], []).append(c)
-     for rule, leaves in rules.items():
-         counts = Counter(c["status"] for c in leaves)
-         print(rule, ", ".join(f"{s} {n}" for s, n in counts.most_common()), sep="\t")
-         for c in leaves:
-             if c["status"] != "VERIFIED" and c["method_name"]:
-                 print("", c["method_name"], c["status"], sep="\t")
-     seen = set()
-     for c in checks:
-         for name in c["output_files"] if c["status"] == "VIOLATED" else []:
-             if name not in seen:
-                 seen.add(name)
-                 cex = counterexample(fetch("--calltrace", name)["calltrace"], trace_shape("evm"))
-                 if cex:
-                     print("\n==", c["rule_name"], c["method_name"] or ""); print(cex.render())
-     ' <job_id> certora/logs/<slug>-p<K>_run<N>.report.json
+     "$(uv tool dir)"/ai-composer/bin/prover-cli --job-url <link> --verdicts \
+       --save-report certora/logs/<slug>-p<K>_run<N>.report.json
      ```
 
-     The statuses come from `prover-cli --leaf-checks`: the prover's own verdicts per method of a parametric rule or invariant, and per assert. A rule's top-level status is only a summary of them. It can read ERROR while a method is VIOLATED, or VIOLATED while other methods are SANITY_FAILED, and it carries no counterexample. The script prints one line per rule with its leaf statuses counted, then a line for each method that is not VERIFIED. After them it prints each violated one's counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped. The full report, with timeouts, errors, alerts and call resolutions, is saved next to the logs.
+     The verdicts are the job's leaf checks: one per method of a parametric rule or invariant, and one per assert. A rule's top-level status is only a summary of them. It can read ERROR while a method is VIOLATED, or VIOLATED while other methods are SANITY_FAILED, and it carries no counterexample. The command prints one line per rule with its leaf statuses counted, then a line for each leaf that is not VERIFIED. After them it prints each violated one's counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped. The saved file also holds the full report: timeouts, errors, alerts and call resolutions.
 
      When you need more than this prints, ask for that one thing: `prover-cli --job-id <job_id> --calltrace rule_output_<k>.json --format json -o <file>` gives a rule's raw output (`assertMessage`, `jumpToDefinition`, the `callTrace` tree, `variables`; each rule's `output_files` in the full report names its file), `--alerts` the alert report, `--download-sources <dir>` the sources the job ran on, file by file.
 
    `.certora_internal/<job_id>.zip` is the input bundle certoraRun uploaded, not the output.
-3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N); read that directory with the results parser that ships with autosetup:
+3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N); read that directory the same way:
 
      ```bash
-     "$(uv tool dir)"/ai-composer/bin/python -c '
-     import sys, pathlib
-     from composer.prover.results import read_and_format_run_result
-     results = read_and_format_run_result(pathlib.Path(sys.argv[1]), "evm")
-     if isinstance(results, str): sys.exit(results)
-     for r in results.values():
-         print(r.path.rule, r.path.contract or "", r.path.method or "", r.status, sep="\t")
-         for m in r.error_messages: print("  error:", m)
-         if r.counterexample: print(r.counterexample.render())
-     ' emv-<N>-certora-<date>/
+     "$(uv tool dir)"/ai-composer/bin/prover-cli --local-path emv-<N>-certora-<date>/ --verdicts
      ```
 
 ## Counterexample analysis (per violated rule)
