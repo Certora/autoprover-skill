@@ -31,7 +31,7 @@ Never hand-roll a conf — start from the autosetup base (`certora/confs/<Main>.
 
 Each job can take up to 30 minutes (`"global_timeout": 1800` caps it), longer than a single foreground command should hold your session. Aim for far less: see *Keep each run under about 30 minutes* below.
 
-With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Start the submission detached, with each part's output in its own log:
+With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Every run is submitted this way, a re-run after a fix included: start the submission detached, with each part's output in its own log, never as certoraRun calls in the foreground:
 
 ```bash
 cd <project_root>
@@ -60,7 +60,7 @@ Wait in the foreground, in two steps, each a bounded call repeated until it ends
    "$(uv tool dir)"/ai-composer/bin/prover-cli --wait <link> <link> ... --timeout 90
    ```
 
-   It checks every 30 seconds and prints one line per job with its status, then `ENDED` once every job has stopped, or `RUNNING` when the 90 seconds are up first. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the wait going, and if it persists, run *Checking a job on the server* by hand to see the error. When it prints `ENDED`, read the results (*Reading results*, method 2).
+   It checks every 30 seconds and prints one line per job with its status, then `ENDED` once every job has stopped, or `RUNNING` when the 90 seconds are up first; on `RUNNING`, run the same command again. Keep `--timeout` at 90, under the shell's own command timeout. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the wait going, and if it persists, run *Checking a job on the server* by hand to see the error. When it prints `ENDED`, read the results (*Reading results*, method 2).
 
 After every call that prints `RUNNING`, write a one-line progress note (elapsed time and the parts still open) and run the same call again.
 
