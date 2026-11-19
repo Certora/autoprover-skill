@@ -146,7 +146,7 @@ For `invalid_input`, the request did not match the run. Read `message` and corre
 
    The source patch touches helper contracts under `certora/` and sometimes the contracts in the scene. The spec patch adds a CVL summary for each hook and adjusts the rule. Read both before you apply them.
 2. Copy the Lean file to `certora/lean/<ruleName>_lemmas.lean` and keep it with the spec. It is the certificate for the lemmas the hooks assume.
-3. Typecheck, then run the full unfiltered prover run as usual. The completion gate does not change: the resolver's own final run is evidence, not a substitute for your run.
+3. Typecheck, then run the full prover run (every part) as usual. The completion gate does not change: the resolver's own final run is evidence, not a substitute for your run.
 4. In the commentary file, record the resolver run id and the final run link from `outcome.prover.link`. Record each hook with its inertness argument from `why_sound`, and the Lean file. In the report, these hooks are trust assumptions discharged in Lean, and the reviewer needs to see them.
 
 ## Cost
