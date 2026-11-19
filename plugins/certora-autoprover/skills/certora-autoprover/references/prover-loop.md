@@ -31,13 +31,15 @@ Never hand-roll a conf — start from the autosetup base (`certora/confs/<Main>.
 
 Each job can take up to 30 minutes (`"global_timeout": 1800` caps it), longer than a single foreground command should hold your session. Aim for far less: see *Keep each run under about 30 minutes* below.
 
-With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Every run is submitted this way, a re-run after a fix included: start the submission detached, with each part's output in its own log, never as certoraRun calls in the foreground:
+With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Every run is submitted this way, a re-run after a fix included. First check that the parts fit the run's prover budget (SKILL.md, *Prover budget*): `"$(uv tool dir)"/ai-composer/bin/prover-cli --budget --budget-file certora/logs/budget.json --more-jobs <K>`, with `<K>` the number of parts, exits with code 3 when they do not. If they do not fit, do not submit. Then start the submission detached, with each part's output in its own log, never as certoraRun calls in the foreground:
 
 ```bash
 cd <project_root>
-nohup sh -c 'for c in certora/confs/<slug>-p*.conf; do certoraRun "$c" > certora/logs/$(basename "$c" .conf)_run<N>.log 2>&1; done' > /dev/null 2>&1 &
+nohup sh -c 'for c in certora/confs/<slug>-p*.conf; do certoraRun "$c" --group_id <group_id> > certora/logs/$(basename "$c" .conf)_run<N>.log 2>&1; done' > /dev/null 2>&1 &
 echo $! > certora/logs/<slug>_run<N>.pid
 ```
+
+Give every submission a new `<N>`, so no log is overwritten. `<group_id>` is the run's group id from `certora/logs/budget.json`; the budget is counted over that group (SKILL.md, *Prover budget*).
 
 ### Waiting for a run
 
