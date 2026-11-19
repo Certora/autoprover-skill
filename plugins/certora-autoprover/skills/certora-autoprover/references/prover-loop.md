@@ -60,7 +60,7 @@ Wait in the foreground, in two steps, each a bounded call repeated until it ends
    "$(uv tool dir)"/ai-composer/bin/prover-cli --wait <link> <link> ... --timeout 90
    ```
 
-   It checks every 30 seconds and prints one line per job with its status, then `ENDED` once every job has stopped, or `RUNNING` when the 90 seconds are up first; on `RUNNING`, run the same command again. Keep `--timeout` at 90, under the shell's own command timeout. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the wait going, and if it persists, run *Checking a job on the server* by hand to see the error. When it prints `ENDED`, read the results (*Reading results*, method 2).
+   It checks every 30 seconds and prints one line per job with its status, then `ENDED` once every job has stopped, or `RUNNING` when the 90 seconds are up first. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the wait going, and if it persists, run *Checking a job on the server* by hand to see the error. When it prints `ENDED`, read the results (*Reading results*, method 2).
 
 After every call that prints `RUNNING`, write a one-line progress note (elapsed time and the parts still open) and run the same call again.
 
@@ -126,7 +126,7 @@ For per-rule statuses and counterexamples:
        --save-report certora/logs/<slug>-p<K>_run<N>.report.json
      ```
 
-     The verdicts are the job's leaf checks: one per method of a parametric rule or invariant, and one per assert. A rule's top-level status is only a summary of them. It can read ERROR while a method is VIOLATED, or VIOLATED while other methods are SANITY_FAILED, and it carries no counterexample. The command prints one line per rule with its leaf statuses counted, then a line for each leaf that is not VERIFIED. After them it prints each violated one's counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped. The saved file also holds the full report: timeouts, errors, alerts and call resolutions.
+     The verdicts are the job's leaf checks: one per method of a parametric rule or invariant, and one per assert. A rule's top-level status is only a summary of them. It can read ERROR while a method is VIOLATED, or VIOLATED while other methods are SANITY_FAILED, and it carries no counterexample. A failed vacuity check counts as a SANITY_FAILED leaf. The command prints one line per rule with its leaf statuses counted. For a rule with a leaf that is not VERIFIED, it adds a line for each such leaf and for each of the rule's sub-checks that are not methods. After them it prints each violated one's counterexample: the failing assert, its spec line, and the call trace with the values filled in and the setup frames dropped. The saved file also holds the full report: timeouts, errors, alerts and call resolutions.
 
      When you need more than this prints, ask for that one thing: `prover-cli --job-id <job_id> --calltrace rule_output_<k>.json --format json -o <file>` gives a rule's raw output (`assertMessage`, `jumpToDefinition`, the `callTrace` tree, `variables`; each rule's `output_files` in the full report names its file), `--alerts` the alert report, `--download-sources <dir>` the sources the job ran on, file by file.
 
