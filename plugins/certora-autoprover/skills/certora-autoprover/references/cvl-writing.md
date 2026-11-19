@@ -13,6 +13,7 @@ Retrieve a page with whatever your agent has: a built-in web-fetch or browse too
 | `overview.html` | spec file anatomy | starting your first spec |
 | `basics.html` | lexical rules, top-level constructs | — |
 | `types.html` | `mathint`, (u)intK, `env`, `method`, `calldataarg`, `storage`, casts | typing questions, cast errors |
+| `cvl2/changes.html` | which casts and other CVL2 changes exist | an unusual cast |
 | `expr.html` | expressions, `lastReverted`, quantifiers | expression semantics |
 | `statements.html` | `require`/`assert`/`satisfy`, `havoc`, control flow | statement semantics |
 | `imports.html` | `import`/`use` | wiring in summaries/invariants specs |
@@ -74,7 +75,7 @@ Retrieve a page with whatever your agent has: a built-in web-fetch or browse too
        - *After `foo()` returns*: on its return value, on storage, and with `@withrevert` on whether it reverted.
     2. **The rule starts mid-`foo()`.** The rule does not call `foo`. It starts from a state `require`d to be the one at `foo`'s external call, and calls the contract's entry point the callback would use, or a parametric `f` for all of them. Use it when the callee is arbitrary and no code or summary can stand for it soundly. It is weaker: it cannot state `foo`'s preconditions before the call or its postconditions after it. Its start state must include every context a callback can run in. Build that state from what holds at `foo`'s external calls: a rule of the first kind that asserts at each call proves it, so the start state rests on a proven fact rather than an assumption.
 
-Casts — these are the ones that actually exist; verify against `docs/cvl/types.html` / `cvl2/changes.html` before using an unusual one:
+Casts — these are the ones that actually exist; verify against `types.html` and `cvl2/changes.html` in the CVL reference above before using an unusual one:
 - `require_(u)intK` / `assert_(u)intK` — narrow `mathint` (or a wider/narrower `(u)intJ`) to `(u)intK`. Casting an `address` or `bytesN` **to** an integer type is NOT supported.
 - `require_address` / `assert_address` — `bytes32` → `address` (there is no `to_address`).
 - `to_bytesL` — `uint(L*8)` → `bytesL`; `to_bytes32` — `address` → `bytes32`.
