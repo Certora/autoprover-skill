@@ -7,6 +7,9 @@
 - For a Solana program: an Anchor, Pinocchio, jiminy or `solana-program` crate, [rustup](https://rustup.rs)
   and a C compiler. The skill checks for the rest of the Rust and Solana toolchain and installs
   it with your go-ahead.
+- For a Soroban contract: a crate on soroban-sdk 22 or 25, [rustup](https://rustup.rs) and a
+  C compiler. The skill checks for the pinned Rust toolchains and the wasm target and installs
+  them with your go-ahead.
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/). The skill installs its tools
   with it. It does not install uv itself.
 - `CERTORAKEY`, required: one organization API key, created on the API Access page at
@@ -30,10 +33,11 @@ claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills
 ```
 
-The Solana skill is the same marketplace, a second plugin:
+The Solana and Soroban skills are the same marketplace, further plugins:
 
 ```sh
 claude plugin install certora-autoprover-solana@certora-skills
+claude plugin install certora-autoprover-soroban@certora-skills
 ```
 
 ### Any agent with skill support
@@ -61,7 +65,7 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 
 | How you installed | How to update |
 |---|---|
-| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` (or `certora-autoprover-solana`) |
+| Claude Code plugin | `claude plugin marketplace update certora-skills && claude plugin update certora-autoprover` (or `certora-autoprover-solana`, `certora-autoprover-soroban`) |
 | A skill installer | Run the installer again for the same repository. |
 
 These update the skill. An update can change

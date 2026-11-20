@@ -1,0 +1,26 @@
+{
+  "name": "certora-autoprover-soroban",
+  "displayName": "Certora AutoProver for Soroban",
+  "description": "End-to-end formal verification of a Soroban contract with the Certora Soroban Prover. Given a Rust contract crate on soroban-sdk 22 or 25, this skill analyzes the contract's functions and storage, scaffolds a CVLR harness into the crate behind a cargo feature, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them as CVLR rules, and iterates the prover until every rule is verified, excused as a suspected bug, or skipped with justification — ending with a verification report.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Certora Ltd.",
+    "url": "https://www.certora.com"
+  },
+  "homepage": "https://www.certora.com",
+  "repository": "https://github.com/Certora/autoprover-skill",
+  "license": "GPL-3.0-only",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://docs.certora.com/en/latest/docs/sunbeam/index.html",
+  "supportUrl": "https://github.com/Certora/autoprover-skill/issues",
+  "privacyPolicyUrl": "https://www.certora.com/privacy",
+  "termsOfServiceUrl": "https://www.certora.com/terms",
+  "keywords": [
+    "formal-verification",
+    "soroban",
+    "stellar",
+    "certora",
+    "cvlr",
+    "rust"
+  ]
+}

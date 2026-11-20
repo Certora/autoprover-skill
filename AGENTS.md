@@ -2,7 +2,7 @@
 
 This repository is a marketplace of Certora agent skills, one plugin per skill under
 `plugins/`. Each plugin directory is self-contained, because an installed plugin is a copy of
-that directory and nothing else. It holds two skills:
+that directory and nothing else. It holds three skills:
 
 - `certora-autoprover`, an end-to-end formal-verification flow for Solidity contracts using the
   Certora Prover, in `plugins/certora-autoprover/skills/certora-autoprover/`. The rest of this
@@ -11,6 +11,11 @@ that directory and nothing else. It holds two skills:
   Certora Solana Prover, in `plugins/certora-autoprover-solana/skills/certora-autoprover-solana/`.
   Use it when the request is to verify a Solana or Anchor program. Its `SKILL.md` is the flow of
   record; it reads its CVLR reference from the AutoProver commit it pins, not from this repository.
+- `certora-autoprover-soroban`, the same flow for Soroban (Stellar) contracts, with CVLR rules
+  and the Certora Soroban Prover, in
+  `plugins/certora-autoprover-soroban/skills/certora-autoprover-soroban/`. Use it when the
+  request is to verify a Soroban contract. Like the Solana skill, its `SKILL.md` is the flow of
+  record and its CVLR reference comes from the AutoProver commit it pins.
 
 If your agent loads `SKILL.md` files on its own, you do not need this file: read the `SKILL.md`
 of the skill the request is for instead.

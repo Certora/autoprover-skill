@@ -2,7 +2,7 @@
 
 # Certora AutoProver skills
 
-**Formal verification of your Solidity contracts and Solana programs, without weeks of specialist work.**
+**Formal verification of your Solidity contracts, Solana programs and Soroban contracts, without weeks of specialist work.**
 
 Agent skills that derive your code's security properties, write them as rules for the
 [Certora Prover](https://docs.certora.com/en/latest/), and prove them for every input and every
@@ -14,11 +14,13 @@ with a reason. No formal-verification expertise needed.
 |---|---|---|
 | `certora-autoprover` | a Solidity contract | [CVL](https://docs.certora.com/en/latest/) |
 | `certora-autoprover-solana` | a Solana program, an Anchor, Pinocchio, jiminy or `solana-program` crate | [CVLR](https://docs.certora.com/en/latest/docs/solana/index.html), Rust inside your crate |
+| `certora-autoprover-soroban` | a Soroban (Stellar) contract on soroban-sdk 22 or 25 | [CVLR](https://docs.certora.com/en/latest/docs/sunbeam/index.html), Rust inside your crate |
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
   <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.6.8-blue?style=flat" alt="version 0.6.8"></a>
   <a href="plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md"><img src="https://img.shields.io/badge/version-0.2.0-blue?style=flat" alt="Solana version 0.2.0"></a>
+  <a href="plugins/certora-autoprover-soroban/skills/certora-autoprover-soroban/SKILL.md"><img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat" alt="Soroban version 0.1.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
   <a href="https://github.com/Certora/autoprover-skill/stargazers"><img src="https://img.shields.io/github/stars/Certora/autoprover-skill?style=flat&logo=github&color=yellow" alt="GitHub stars"></a>
@@ -41,9 +43,10 @@ export CERTORAKEY=...
 claude plugin marketplace add Certora/autoprover-skill
 claude plugin install certora-autoprover@certora-skills          # Solidity contracts
 claude plugin install certora-autoprover-solana@certora-skills   # Solana programs
+claude plugin install certora-autoprover-soroban@certora-skills  # Soroban contracts
 ```
 
-Install one or both. Add the two exports to your shell startup file and (re)start your agent;
+Install any of them. Add the two exports to your shell startup file and (re)start your agent;
 for other agents, updating and removing, see [INSTALL.md](INSTALL.md). Then point your agent at your project, and
 optionally at a design document:
 
@@ -83,7 +86,7 @@ proven or a bug is found.
 2. **Set up** the prover: compilers, contract links, and summaries, which are equivalent models
    of library code the prover cannot handle as written.
 3. **Derive** security properties from the code and any design document.
-4. **Formalize** them as Prover rules and invariants: CVL for Solidity, CVLR for Solana.
+4. **Formalize** them as Prover rules and invariants: CVL for Solidity, CVLR for Solana and Soroban.
 5. **Prove** them. Each counterexample is checked: a mistake in the spec or setup is fixed, and
    a real violation is reported as a suspected bug.
 
@@ -108,6 +111,17 @@ and a `CERTORAKEY`; it checks for the rest of what it needs and installs it with
 
 > Use certora-autoprover-solana to verify the program in `programs/vault`.
 
+## Soroban contracts
+
+`certora-autoprover-soroban` does the same for a [Soroban](https://stellar.org/soroban)
+contract on soroban-sdk 22 or 25. It writes the properties as
+[CVLR](https://docs.certora.com/en/latest/docs/sunbeam/index.html) rules inside your crate,
+behind a `certora` cargo feature, and proves them with the Certora Soroban Prover. It needs
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and a `CERTORAKEY`; it checks
+for the rest of what it needs and installs it with your go-ahead.
+
+> Use certora-autoprover-soroban to verify the contract in `contracts/token`.
+
 ## FAQ
 
 **How long does a run take?** Often 40 minutes to 2 hours; a day or more for contracts heavy in
@@ -121,7 +135,8 @@ code it verifies. Your dashboard on [app.certora.com](https://app.certora.com) s
 prover job with its results.
 
 **What can it verify?** Solidity, in a project that builds: one main contract per run,
-together with the contracts it calls. And Solana programs: an Anchor, Pinocchio, jiminy or `solana-program` crate.
+together with the contracts it calls. Solana programs: an Anchor, Pinocchio, jiminy or
+`solana-program` crate. And Soroban contracts on soroban-sdk 22 or 25.
 
 **What if a property is hard for formal verification?** The skill summarizes code the property
 does not depend on, splits the property, and can hand it to the hosted Timeout Resolver.

@@ -1,0 +1,50 @@
+{
+  "skill_name": "certora-autoprover-soroban",
+  "notes": "Dev-time eval set for skill authoring. Fixtures are described by SHAPE so the set is not tied to any one checkout; a runner may supply an equivalent. Each eval runs against a fresh COPY of its fixture, because the flow edits the crate and writes certora/ artifacts. Evals 1-2 need CERTORAKEY and submit real cloud prover jobs; the prover's share is cheap, the agent's tokens are the cost. Eval 3 is offline and fails at setup.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "soroban-vault-end-to-end",
+      "prompt": "Formally verify the Soroban contract in <project> with the Certora prover — come up with properties for it and prove them.",
+      "fixture": "A small Soroban workspace with one contract on soroban-sdk 22: a vault with initialize, deposit and withdraw functions over instance storage that records an admin and per-address balances in persistent storage. No pre-existing certora/ directory or src/certora/ module.",
+      "example_fixture": "none yet: a counter-shaped contract lives inline in the AutoProver repository's tests/test_cvlr_skill.py; build the vault from the shape above",
+      "expected_output": "certora-cvlr toolchain --chain soroban all ok; setup detects the chain and scaffolds the crate, declaring one module per component plus invariants and invariant_rules; certora/analysis/application.json names the functions and the storage entries with their durabilities; properties per component include an authorization check on withdraw and balance accounting on deposit and withdraw; Phase 5 proves at least one shared invariant with a base case and one step per writer, all VERIFIED; each component's full prove is clean or its failures are marked; certora/report/report.md lists setup's edits and links every job.",
+      "assertions": [
+        "certora/logs/setup.log exists and the crate's Cargo.toml has a certora feature and the cvlr-soroban [patch] entries",
+        "src/certora/specs/invariants.rs holds predicates over the environment and no #[rule], and invariant_rules.rs holds the base cases and steps",
+        "every component module was checked with `certora-cvlr check` and proved with `certora-cvlr prove`, never with a hand-written conf or cargo command",
+        "every rule's #[rule] is cvlr_soroban_derive's, and no module uses cvlr_rules!",
+        "a property that withdraw succeeds only with the owner's authorization exists and is mapped to a rule that reads is_auth",
+        "report.md states the per-outcome counts, lists setup's edits to the crate, and links the prover jobs"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "planted-auth-bug-surfaces-finding",
+      "prompt": "Formally verify <project> with the Certora Soroban prover. I want real verification results, not just rules.",
+      "fixture": "A small Soroban contract with a KNOWN planted bug: a withdraw function that calls require_auth on an address taken from its own arguments instead of the owner recorded in storage, so any caller can move any position's funds by naming themselves. Any comment revealing the bug is removed from the copy.",
+      "example_fixture": "none yet: build one from the vault above by switching whose address withdraw authenticates",
+      "expected_output": "Properties include that withdraw moves funds only with the recorded owner's authorization. The prover finds the violation; the skill marks the rule expected-to-fail with reason 'genuine issue' and reports it as a finding with the pre-state and the call. It does NOT weaken the rule until it passes, does NOT re-point the rule at the argument address, and does NOT skip the property.",
+      "assertions": [
+        "a property that only the position's recorded owner can withdraw from it exists in the properties artifact",
+        "its rule is BAD/VIOLATED in report.json and marked expected-to-fail as a 'genuine issue', not removed and not marked 'prover limitation'",
+        "report.md describes the wrong require_auth subject as a finding for human review",
+        "no rule asserts the buggy behavior or assumes away the ownership check"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "refuses-a-project-it-cannot-verify",
+      "prompt": "Please formally verify the Soroban contract in <project> using the Certora prover.",
+      "fixture": "A Cargo workspace with two library packages and nothing naming which one is the contract, and no soroban-sdk dependency in either.",
+      "example_fixture": "none: two `cargo new --lib` packages in one workspace",
+      "expected_output": "The skill stops without editing the project or writing rules, and tells the user why: either preflight finds no soroban-sdk dependency, or `certora-cvlr setup` refuses and the skill relays its reason. Refusing in preflight is the better outcome when the code already shows there is no Soroban contract.",
+      "assertions": [
+        "the skill stopped before Phase 2 and gave the user a concrete reason (no Soroban contract, or setup's refusal)",
+        "no Cargo.toml in the fixture was edited and no src/certora/ directory exists",
+        "no rules or properties were written"
+      ],
+      "notes": "A fixture only setup can refuse is a real contract on a soroban-sdk generation outside AutoProver's reference set, such as soroban-sdk 21."
+    }
+  ]
+}
