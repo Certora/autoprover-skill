@@ -8,7 +8,7 @@ AutoSetup turns "a Foundry/Hardhat project + a main contract" into "a prover set
 
 Two things about that install are worth knowing here. autosetup shells out to `certoraRun`, so certora-cli has to be on the same PATH, which is what `--with-executables-from certora-cli` arranges: `uv tool install` links the console scripts of the package it was given, not those of its dependencies. And exactly one of the `certora-cli`, `certora-cli-beta` and `certora-cli-beta-mirror` extras may be chosen: they are declared mutually exclusive and all ship the same `certora_cli` module.
 
-Requires `ANTHROPIC_API_KEY` to be set to something in the environment (or a `.env` in the working directory), and the check fires at import time regardless of flags, so even `--skip-llm` runs need it set. What it tests is that the value is non-empty, never that it authenticates (`certora_autosetup/setup/setup_summaries.py:70-93`); with a `.env` present the file is loaded and the value is not tested at all. In this flow the value is a literal placeholder and goes nowhere. `CERTORAKEY` is needed for the cloud prover jobs it submits.
+Requires `ANTHROPIC_API_KEY` to be set to something in the environment (or a `.env` in the working directory), and the check fires at import time regardless of flags, so even `--skip-llm` runs need it set. What it tests is that the value is non-empty, never that it authenticates; with a `.env` present the file is loaded and the value is not tested at all. In this flow the value is a literal placeholder and goes nowhere. `CERTORAKEY` is needed for the cloud prover jobs it submits.
 
 ## Invocation
 
