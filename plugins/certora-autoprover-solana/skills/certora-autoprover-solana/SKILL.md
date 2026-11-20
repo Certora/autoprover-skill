@@ -31,16 +31,18 @@ A VIOLATED rule comes with a **counterexample**. Deciding whether it means "my r
 **Two prime directives:**
 
 1. Your authoritative sources on CVLR and the prover are the reference text `certora-cvlr setup` writes (below), the CVLR crates' own source at the versions it names, and https://docs.certora.com/en/latest/docs/solana/index.html. Do not assume the prover works some way because it is "intuitive".
-2. Do not reason yourself into whether a property is true — write a rule that lets the *prover* demonstrate it.
+2. Do not reason yourself into whether a property is true — write a rule that lets the *prover* demonstrate it. Never narrow a rule because you judge a case unexploitable or harmless; formalize the full claim, let the prover rule, and grade severity in the report.
 
 ## Inputs, artifacts, commands
 
-**Inputs**: a project root (a Cargo workspace or package), the program to verify when the workspace holds more than one (its package name), optionally a design document. Track the phases explicitly — one entry per phase in whatever task list or plan your agent keeps, marked done as you leave each phase; if it keeps none, state which phase you are entering each time you start one.
+**Inputs**: a project root (a Cargo workspace or package), the program to verify when the workspace holds more than one (its package name), optionally a design document, and optionally a statement of which parties the deployment trusts (Phase 7 uses it to classify findings). Track the phases explicitly — one entry per phase in whatever task list or plan your agent keeps, marked done as you leave each phase; if it keeps none, state which phase you are entering each time you start one.
 
 Every phase writes its result under the project's `certora/` directory, and the rules live in the program's crate, so an interrupted run resumes by reusing artifacts whose inputs haven't changed (check before redoing work, and say when you reuse):
 
 | Artifact | Written by |
 |---|---|
+| `certora/logs/budget.json` | Phase 0 (the prover budget and the run's job group) |
+| `certora/logs/budget.md` | Phase 6 (*Prover budget*: the counts and what was decided from them) |
 | `certora/analysis/application.json` | Phase 2 (component model) |
 | `certora/logs/setup.log`, and the edits it lists | Phase 3 (`certora-cvlr setup`) |
 | `certora/analysis/dependency_moves.json` | Phase 3, only when setup refused on dependency versions |
@@ -63,7 +65,7 @@ Create the artifact directories up front: `mkdir -p certora/analysis certora/pro
 | `toolchain` | checks the Rust and Solana tools, and prints the command that installs each missing one |
 | `setup <project> --component M ...` | scaffolds the crate, declares the rule modules, compiles, writes the reference text |
 | `check <project> --component M` | type-checks one module for the SBF target, in seconds |
-| `prove <project> --component M [--rule R] [--loop-iter N] [--optimistic-loop WHY] [--unsat-core]` | builds one module, submits its rules, prints the job link |
+| `prove <project> --component M --group-id G [--rule R] [--loop-iter N] [--optimistic-loop WHY] [--unsat-core]` | builds one module, submits its rules in the run's job group (*Prover budget* in Phase 6), prints the job link |
 | `wait <link> --for S` | waits at most `S` seconds, then prints `RUNNING`, or `FINISHED` and every rule's verdict, or `FAILED` |
 | `cex <link> --rule R` | prints the counterexample of each violated instance of a rule: the call trace and the values the rule logged with `clog!` |
 | `vacuity <link> --rule R` | prints the unsat core of a `prove --unsat-core` job, and whether the rule's assertion is in it |
@@ -97,6 +99,18 @@ Fail fast with a specific message rather than improvising around a broken enviro
   The first call builds the package, which takes a few minutes; later calls reuse the build. Before that first call, tell the user what will be built (`ai-composer` with `certora-cli`, from the AutoProver repository at the pinned commit) and ask for their go-ahead.
 - **The toolchain.** Run `certora-cvlr toolchain`. Every line must read `ok`. For a `MISSING` line with an `install:` command, show the user the commands and ask for their go-ahead, run them only after they agree, and run `toolchain` again. A `MISSING` line without one (rustup, a C compiler) is the user's to install: stop and tell them.
 - **`CERTORAKEY`** set (cloud prover). No model API key is needed: AutoProver makes no model call in this flow.
+- **`prover-cli`**, which counts the run's prover jobs against its budget. It is the `certora-prover-cli` package on PyPI, run through `uvx` like `certora-cvlr`. Write a second wrapper beside the first, and call it for every `prover-cli` command below:
+
+  ```bash
+  cat > .certora_internal/cvlr/prover-cli <<'EOF'
+  #!/bin/sh
+  exec uvx --python 3.12 --from 'certora-prover-cli==0.2.6' prover-cli "$@"
+  EOF
+  chmod +x .certora_internal/cvlr/prover-cli
+  ```
+
+  Below, `prover-cli` means this wrapper; give sub-agents its absolute path.
+- **The prover budget** of this run (*Prover budget* in Phase 6). If `certora/logs/budget.json` does not exist, write it: `{"jobs": 500, "minutes": 5000, "group_id": "<a new UUID>"}` (`python3 -c 'import uuid; print(uuid.uuid4())'`), with the numbers the user gave if any. Every `prove` of the run passes that group id. On resume, keep the file as it is. Tell the user the budget.
 - **The program.** The project builds with `cargo`, and the program's package has a library target and is an Anchor, Pinocchio (0.8 to 0.12), jiminy or plain `solana-program` program. Other frameworks are not supported yet. `setup` refuses a project on a Solana platform generation this AutoProver does not support, or one that links two generations, with the reason. Many such projects verify after a change to their dependency versions alone: see *When setup refuses* in Phase 3.
 
 ## Phase 1 — Design document (optional but valuable)
@@ -193,7 +207,7 @@ At the barrier, apply the requests, re-run the Phase 5 gate, and for a change to
 
 Keep a set of **open** components (initially all of them). Each round:
 
-1. **Generate** — run one *generator* per open component, and **wait for the whole batch**. Give each generator: its component's properties, the handlers' source, the path of the reference directory, the shared predicates in `invariants.rs`, and — on rounds after the first — its previous module plus the judge feedback that rejected it. It runs the **Generator procedure** below.
+1. **Generate** — run one *generator* per open component, and **wait for the whole batch**. Give each generator: its component's property list verbatim (each title, sort, description and handlers exactly as in `certora/properties/<module>.properties.json`), the handlers' source, the path of the reference directory, the shared predicates in `invariants.rs`, and — on rounds after the first — its previous module plus the judge feedback that rejected it. It runs the **Generator procedure** below. Never restate or narrow a property in the brief; any modelling advice of your own is labelled as advice, and the property's own text decides what must be formalized.
 2. **Barrier** — apply the requests (above), and re-run what they invalidate.
 3. **Judge** — run one *judge* per component a generator just produced, and wait for all of them. Each writes accept / reject + concrete feedback to `certora/properties/<module>.judge-round<N>.md` before any fix is applied.
 4. **Partition** — a component *leaves* the open set only when, this round, its judge **ACCEPTED** the module **and** its last full `prove` (no `--rule`) was clean: every rule VERIFIED or marked expected-to-fail. A barrier re-run that is not clean **reopens** a component, with the change that broke it as its feedback.
@@ -216,12 +230,12 @@ Read `reference/cvlr.md` before the first rule, and `reference/author.md` by sec
 - Write the strict property. A rule that permits a loss, a rounding error or any other tolerance must name the source of its bound: the design document, a comment in the code, or the property itself.
 - Assume shared invariants from `invariants.rs`; never restate one locally. If you need one that is not there, write a request.
 - After every edit: `certora-cvlr check <project> --component <module>`, until it prints `ok`.
-- Then `certora-cvlr prove <project> --component <module>`, and `wait` for it. `prove` prints the rules the job checks; a rule you wrote and it does not list is not a rule (a missing `#[rule]`, or a module the feature does not compile).
+- Then check that the job fits the budget (*Prover budget* below), run `certora-cvlr prove <project> --component <module> --group-id <group_id>`, and `wait` for it. `prove` prints the rules the job checks; a rule you wrote and it does not list is not a rule (a missing `#[rule]`, or a module the feature does not compile).
 - For each rule not VERIFIED, read the report `wait` prints and act. When it ends by naming recipes, read each one before you change anything: they are what AutoProver hands its own rule author on the same result.
   - **VIOLATED**: read the counterexample with `certora-cvlr cex <link> --rule <rule>`; never dig it out of the job's files. `clog!` the values your assertion reads, and the counterexample shows them. A starting state no instruction can produce is a missing invariant: request one. A rule that asserted something the property does not say is a rule bug: fix it. A real violation of the property is a finding: mark it **expected-to-fail** with the reason `genuine issue`, a description of the pre-state and the call, and keep the rule as it is. Never weaken a rule until it passes.
-  - **SANITY_FAILED** (vacuous): `certora-cvlr prove <project> --component <module> --rule <rule> --unsat-core`, `wait`, then `certora-cvlr vacuity <link> --rule <rule>`, and read the core as `reference/vacuity.md` says. When the assertion is in the core, weakening the assumptions is not the fix.
+  - **SANITY_FAILED** (vacuous): `certora-cvlr prove <project> --component <module> --group-id <group_id> --rule <rule> --unsat-core`, `wait`, then `certora-cvlr vacuity <link> --rule <rule>`, and read the core as `reference/vacuity.md` says. When the assertion is in the core, weakening the assumptions is not the fix.
   - An unwinding failure on a loop: recipe K4, which "The loop ladder" in `reference/author.md` points to. Bound the inputs that set the trip count first. Then, if the loop is in code the property does not depend on, summarize it out of the way; if the property is about the loop, skip it. Then raise `--loop-iter`; `--optimistic-loop "<why>"` is unsound and last.
-  - **TIMEOUT**: recipe K8, and "When a computation will not finish: a bounded stand-in" in `reference/author.md`. The statistics `wait` prints under the verdicts name the functions that held the rule's time; a stand-in for the one that dominates is usually the fix, when the property only consumes its result. After three jobs in a row with a timed-out rule, stop restating the timed-out rules: renaming, splitting or dropping a conjunct does not change what a rule runs over, and each of those jobs runs to the time limit. Change what is under the rule (a stand-in for the function the statistics name), drop a handler-level rule whose fact a rule on the program's accounting function already proves and say how the two connect, or skip the property and cite the timed-out jobs. A job that **halted**, with no verdicts or with every unfinished rule cut off, is recipe K9: find the rule that halts it before resubmitting the rest.
+  - **TIMEOUT**: recipe K8, and "When a computation will not finish: a bounded stand-in" in `reference/author.md`. The statistics `wait` prints under the verdicts name the functions that held the rule's time; a stand-in for the one that dominates is usually the fix, when the property only consumes its result. After two jobs in a row with a timed-out rule, stop restating the timed-out rules (*Prover budget* below closes such a rule): renaming, splitting or dropping a conjunct does not change what a rule runs over, and each of those jobs runs to the time limit. Change what is under the rule (a stand-in for the function the statistics name), drop a handler-level rule whose fact a rule on the program's accounting function already proves and say how the two connect, or skip the property and cite the timed-out jobs. A job that **halted**, with no verdicts or with every unfinished rule cut off, is recipe K9: find the rule that halts it before resubmitting the rest.
   - A pointer-analysis failure that names a function the property does not depend on: recipe K10. Summarize the function in `<package>/src/certora/summaries/<module>.txt`. A directive is `;` lines saying why it is sound here, then at least one `#[type(<location>:<kind>)]` line typing what the function returns, then the pattern:
 
     ```
@@ -238,11 +252,45 @@ Read `reference/cvlr.md` before the first rule, and `reference/author.md` by sec
   - The notes `wait` prints after the verdicts about functions treated as external are not a failure, but read them: a verified rule over an external call proved less than it seems.
   - A property no rule can express, after a real attempt: **skip** it, with the reason. A reason that blames the prover cites the job that showed it.
 - Record the module's state in `certora/properties/<module>.status.json`: `property_rules` (every property title → the rules that check it, or `skipped` with the reason), `expected_failures` (rule → `genuine issue` or `prover limitation`, the reason, the pre-state), the settings the last job used (`loop_iter`, `optimistic_loop` and why), and the last full job's link and every rule's verdict.
-- Iterate until a full `prove` is clean or the principled fixes are exhausted. Write `certora/properties/<module>.commentary.md`: what each rule drives, every assumption and why it holds, every summary. **Hand over** the module, the status file and the commentary, and any barrier requests; then stop.
+- Iterate until a full `prove` is clean or the principled fixes are exhausted. **A generator submits at most 8 `prove` jobs per round.** A full `prove` counts as 1, and so does a `prove --rule` or `--unsat-core` job; `check` does not count. Make the 8th job the final full `prove`. A rule that still fails or times out after 2 principled fixes is closed instead of iterated further: expected-to-fail as a `genuine issue` when the counterexample shows a code issue, otherwise expected-to-fail as a `prover limitation`, or skipped, with the reason. Rounds 2 and 3 get 8 jobs each.
+- Write `certora/properties/<module>.commentary.md`: what each rule drives, every assumption and why it holds, every summary. For a genuine issue, also record from the counterexample who acts: the signer of each call and whether it is an authority the program stores or checks (an admin, a config or pool authority, a position owner), which accounts the caller supplied and whether the program could tell them apart from the expected ones, and what each external program or account had to do (a CPI's effect, an oracle's value, a mint's or token account's state) compared with what its specification and an honest implementation would do. Phase 7 classifies the finding from this. **Hand over** the module, the status file and the commentary, and any barrier requests; then stop.
 
 ### Judge inputs
 
-A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-context pass in sequential mode. Give it: `reference/judge.md` (its brief), the module, the handlers' source, the properties, the design document when there is one, `invariants.rs` with the Phase 5 status, the status file and the commentary. It produces accept / reject + concrete feedback, on disk before anyone acts on it. It checks in particular that every `cvlr_assume!` of a shared predicate names one whose steps all verified, that every summary avoids code the property depends on and none returns an enum, a `Result` or an `Option`, and that no rule was weakened until it passed. A generator may rebut feedback on its next round only with hard evidence: a compile error, a counterexample, a job link.
+A fresh adversarial reviewer: a separate sub-agent in parallel mode, a fresh-context pass in sequential mode. Give it: `reference/judge.md` (its brief), the module, the handlers' source, the property list from `certora/properties/<module>.properties.json` (never the generator's brief), the paths of the other components' modules, the design document when there is one, `invariants.rs` with the Phase 5 status, the status file and the commentary. It produces accept / reject + concrete feedback, on disk before anyone acts on it. It checks in particular that every `cvlr_assume!` of a shared predicate names one whose steps all verified, that every summary avoids code the property depends on and none returns an enum, a `Result` or an `Option`, and that no rule was weakened until it passed. A part of a property that the module or its commentary leaves to another component or to the shared invariants ("covered by the X component") counts as formalized only when the judge finds the rule or step there that states that part; it reads that module to check. A part excluded on impact grounds ("read-only", "benign") instead of the property's wording is unformalized. A generator may rebut feedback on its next round only with hard evidence: a compile error, a counterexample, a job link.
+
+### Prover budget
+
+A skill run has a fixed prover budget: by default **500 prover jobs and 5000 prover minutes**, set in Phase 0 and stored in `certora/logs/budget.json`. Minutes are what the run costs: each job's runtime on the server, rounded up to whole minutes. Nothing stops a submission past the budget except you: never submit a job that does not fit what is left, and spread the budget so that every component gets a fair share and no single hard property drains it.
+
+Every `prove` is one cloud job, a `--rule` or `--unsat-core` job included, and every one passes `--group-id <group_id>`, the id in `budget.json`; `check` submits no job. The server lists the group's jobs with their runtimes, and this prints what is used, what is left, and the use per component, taken from the first word of each job's message (`prove` starts it with the component's module):
+
+```bash
+prover-cli --budget --budget-file certora/logs/budget.json
+```
+
+A job that has not finished counts as 30 minutes, or its time so far if that is longer. With `--more-jobs <K>` it also says whether `K` more jobs fit, at one job and 30 minutes each, and exits with code 3 when they do not. A job submitted moments ago may not be listed yet; the next count includes it.
+
+Run it at these points and write the numbers, with what you decided from them, into `certora/logs/budget.md`:
+
+1. **After Phase 5** (the shared invariants). If it took more than a quarter of the budget, say so to the user before the components start.
+2. **Before each round's Generate.** Split what is left among the open components, keeping back a tenth for the barrier:
+   - **Round 1:** spend at most half of what is left, so rounds 2 and 3 still have room.
+   - **Later rounds:** spend what is left, less the barrier's tenth.
+   - **Weighting:** weight each component by its open properties, and by their rank when the property lists carry one. Give no component less than one full `prove`.
+   - **The brief:** put each component's allowance, in jobs and minutes, into its generator's brief.
+3. **At the barrier, before judging.** Compare each component's use with its allowance and say which overran and why. Then estimate the next round from this round's spend per component.
+   - **If it does not fit,** regenerate only the components where it buys the most: rejected for a fixable reason, or with high-ranked properties still unresolved.
+   - **Close the others now** on their latest full `prove`, under the round cap below.
+4. **Before Phase 7.** Write the final use per component and in total. The report states it.
+
+The generator works inside its allowance:
+- **Check every submission.** Before each `prove`, run the count above with `--more-jobs 1`. Submit only if it fits, and if your component's allowance covers it at one job and 30 minutes. Keep enough of the allowance for the final full `prove`.
+- **Spend cheaply.** Iterate with `--rule` on the rules that failed or changed, and submit at most two full `prove` jobs per round, within the 8 jobs a round allows.
+- **No single property drains the budget.** A property may use at most a quarter of its component's allowance. A rule that has timed out twice is closed: expected-to-fail as a `prover limitation`, with what was tried. It is not tried a third time. A hard property is recorded and left; it is not chased.
+- **When the allowance or the budget runs out,** stop submitting. Hand over the latest results, with every rule that has no verdict listed as not proven because of the budget, never as verified.
+
+When what is left of the run no longer covers one more job, nobody submits again. Read the jobs still in flight, close every open component on its latest full `prove`, and write the report.
 
 ### Per-component round cap
 
@@ -259,9 +307,19 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Per property: title, sort, description, component, handlers, the rules that check it, and each rule's outcome mapped to GOOD (VERIFIED) / BAD (VIOLATED) / VACUOUS (SANITY_FAILED) / ERROR / TIMEOUT / SKIPPED / UNKNOWN, plus the job link.
 - Group the properties into audit-style sections — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
 - List skipped properties with reasons. Split the expected-failure rules by *why* they were marked: a rule that exposed a genuine issue is a **finding** — describe the pre-state, the instruction and its impact for a human security reviewer; a rule marked only because of a prover limitation is NOT a bug — list it separately as a coverage gap.
+- Classify every finding by the trust it needs. A finding that needs a trusted party to misbehave is a hardening note, not a vulnerability, and listing it as one buries the findings that matter. The rule was written without trusting anyone (prime directive 2); this step is where trust is applied.
+  - **Trusted parties.** Use the user's statement if one was given. Otherwise: every authority the program stores or checks (an admin, a config, pool or fee authority, any role key recorded in an account), the program's upgrade authority, whoever initializes a global or config account, and every program or account that a trusted party configures or that is fixed at initialization (an oracle feed, a mint, a vault, a whitelisted program). The System Program, the token programs and the other native programs behave as specified. A trusted account is assumed to hold what its owner program and a trusted configuration put there; the rule's arbitrary accounts are deliberately freer than that.
+  - **Every account an instruction takes is chosen by its caller.** A caller who passes an account of the right type but the wrong identity (another user's position, a look-alike mint, a vault of another pool) is an unprivileged attacker, not a trusted party, unless the program checks that account against something a trusted party fixed.
+  - **Decide from the counterexample and the source, not the finding's title.** Take the recorded actors (Phase 6 commentary). For each call, read the signer and account checks that gated it. For each external program or account, compare what it did or held with what its specification and an honest implementation would. Then pick one class:
+    - `unprivileged`: a caller with no stored authority triggers it, every trusted party behaves honestly and within the ranges its setters accept, and the harm falls on someone other than the caller.
+    - `trusted_party`: it needs a trusted party to act maliciously, to set a harmful value, to initialize non-atomically, or a trusted program or account to deviate from its specification or from honest behaviour. Name the party and what it must do.
+    - `self_harm`: only the caller loses, for example by naming a wrong destination account or sending lamports to an account it cannot recover from.
+  - When some variants of the finding need trust and others do not, split it, or take the class of the weakest precondition that still produces the harm and say so.
+  - Grade severity under the trust assumption: a `trusted_party` finding is informational unless the user said that party is untrusted. State what the severity would be without that trust in one clause. Grade a `self_harm` finding by how plausible the mistake is and what it costs: informational when it takes an input no normal use of the program leads to, higher when an ordinary call through the documented instructions, or a common client or CPI integration, silently loses a material share of the caller's funds.
+  - In `report.json`, give each finding `trust_class` and `trusted_preconditions` (a list of `<party>: <what it must do>`, empty for `unprivileged`). In `report.md`, list `unprivileged` findings first, then a section "Findings that need a trusted party", then `self_harm`.
 - Coverage and confidence: totals per outcome, and everything that limits confidence: sanity failures, every summary with its reason and its component, every `optimistic_loop` with its reason, every bare `cvlr_assume!` that is not a proved invariant, and the functions the prover treated as external in verified rules. Name the property classes that produced no property for any component, with the one-line reason Phase 4 recorded.
   A summary applies to every rule of its component, at every call it matches, so a rule over a summarized function checked the summary, not the function. Where a summary covers code a property depends on, the rule passed having checked nothing: state the function writes keeps its old value, and an assertion that it is unchanged or within bounds holds trivially. For each summary, name the properties whose handlers reach it, and say next to their verdicts what the summary removed.
 - The changes made to the user's crate: the edits `setup` made, every dependency move from `certora/analysis/dependency_moves.json`, and every edit to the program's source from `certora/analysis/source_edits.json`, each with its reason. A property proved after a dependency move is a property of the build with the moved dependencies. Say so next to the verdicts.
 - How to re-run: `certora-cvlr prove <project> --component <module>` for each component, with the settings each one needs.
 
-Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, then prover-limitation gaps and skips with reasons, and links to the prover jobs.
+Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, `unprivileged` before `trusted_party` and `self_harm`, then prover-limitation gaps and skips with reasons, and links to the prover jobs.
