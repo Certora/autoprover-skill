@@ -9,10 +9,11 @@ compatibility: >-
   pins, which the skill installs with solc-select, plus forge or node to read the project's
   build plan. No Anthropic key is
   needed: autosetup runs with --skip-llm, and the variable it checks at import takes a
-  placeholder. For the hosted Timeout Resolver the skill can fall back on, the same key needs
-  the Runs API permissions, and network access to app.certora.com.
+  placeholder. For the hosted property generator, which Phase 4 uses by default when the
+  project is a pushed GitHub commit and the organization's balance covers it, and the hosted Timeout Resolver the skill can fall back
+  on, the same key needs the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.6.9"
+  version: "0.7.0"
   author: certora
 ---
 
@@ -53,13 +54,15 @@ Every phase writes its result under the project's `certora/` directory, so an in
 | `certora/analysis/compilers.json` | Phase 3 (compiler selection) |
 | `certora/analysis/source_edits.json` | Phase 3 (ERC-7201 annotations added to the sources) |
 | `certora/confs/<Main>.conf`, `certora/specs/summaries/…`, `certora/specs/sanity-<Main>.spec` | Phase 3 (autosetup) |
+| `certora/propgen/keys.json`, `certora/propgen/run.json` | Phase 1 (hosted property generation launched) |
+| `certora/propgen/property_set.json`, `certora/propgen/assignment.json` | Phase 4 (hosted property set read and assigned) |
 | `certora/properties/<slug>.properties.json` | Phase 4 |
 | `certora/analysis/method_difficulty.json`, `certora/specs/summaries/<Main>_difficulty_summaries.spec`, `certora/specs/summary-soundness.spec` + `certora/confs/summary-soundness.conf` | Phase 5 |
 | `certora/specs/invariants.spec` + `certora/confs/invariants.conf` (or one `invariants-<group>` pair per invariant unit) | Phase 6 |
 | `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md`, `certora/properties/<slug>.judge-round<N>.md` | Phase 6 |
 | `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
 
-Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
+Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean certora/propgen` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
 Long-running commands (autosetup, and the Phase 0-3 certoraRun calls that wait for results) take tens of minutes or more, longer than a single foreground command should hold your session. **Start them detached, then wait for them in the foreground with a bounded loop.** Starting needs nothing but a shell:
 
@@ -125,11 +128,13 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
   Two machine facts that belong here rather than in Phase 3. solc-select moves its whole store into an active virtualenv, so every `solc-select` command in this flow runs under `env -u VIRTUAL_ENV`. And no directory holding a compiler may contain a space: certoraRun builds the compiler command as one string and splits it on whitespace.
 
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
-- Optional: the key in `CERTORAKEY` also carries the Runs API permissions (`references/timeout-resolver.md`). Phase 6 needs them only when a rule times out and the manual fixes are exhausted. Their absence blocks nothing here; note it, and if a timeout later calls for the resolver, ask the user for a key that has them.
+- Optional: the key in `CERTORAKEY` also carries the Runs API permissions. The hosted property generator needs `runs:create` and `runs:read` (`references/property-generation.md`), and the Timeout Resolver needs those two plus `runs:cancel` and `artifacts:read` (`references/timeout-resolver.md`). Their absence blocks nothing here: Phase 4 then drafts the properties itself, and Phase 6 uses the resolver only when a rule times out and the manual fixes are exhausted. Note what is missing, and if a timeout later calls for the resolver, ask the user for a key that has them.
 
 ## Phase 1 — Design document (optional but valuable)
 
 If the user supplied a doc, use it. Otherwise spend a few minutes looking for one: shortlist by name/location (`docs/`, files named design/spec/architecture/whitepaper, top-level `*.md`, READMEs near the contract), then judge by content. A doc qualifies if it describes **intended behavior**: architecture/component breakdown, natural-language descriptions of inter-contract interactions, invariants ("total supply equals sum of balances"), accounting formulas, access-control rules, threat model. Build/deploy instructions, usage docs, changelogs, and generic READMEs do NOT qualify — never pass one off as a design doc. Proceeding without a doc is fine; say so and derive intent from the code.
+
+**Then launch the hosted property generator** when the project qualifies, as `references/property-generation.md` describes: a GitHub commit that the service can read, with no uncommitted `.sol` change, and a key with the scopes it needs. Launch it without asking when the estimate says the balance covers it, and tell the user in one line. Do not wait for it: it runs while Phases 2 and 3 do, and Phase 4 reads its result. When the project does not qualify, say why in one line and continue; Phase 4 drafts the properties itself.
 
 ## Phase 2 — Component analysis
 
@@ -242,6 +247,8 @@ Wait on it with the bounded foreground loop above (`<name>` is `autosetup`), rep
 If autosetup fails, read the log tail and fix the underlying issue (a solc version not provisioned yet, abstract main contract, stale caches — see the reference) instead of retrying blindly.
 
 ## Phase 4 — Property formulation (per main-contract component)
+
+**When the hosted property generator was launched in Phase 1**, wait for it here and read its property set (`references/property-generation.md`, *Waiting* and *Reading the property set*). Its properties are the first round for each component: assign them to the Phase 2 components, then run one round of your own per component against the rules below. When it was not launched or ended without a property set, draft every round yourself.
 
 For each component of the main contract, formulate **security properties** as an audit reviewer would. Each property gets a globally unique snake_case `title`, a `sort`, and a precise, concise description. Three sorts:
 
@@ -403,6 +410,7 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
   - In `report.json`, give each finding `trust_class` and `trusted_preconditions` (a list of `<party>: <what it must do>`, empty for `unprivileged`). In `report.md`, list `unprivileged` findings first, then a section "Findings that need a trusted party", then `self_harm`.
 - Coverage summary: totals per outcome, and anything that limits confidence (sanity failures, unresolved calls left summarized as NONDET, trust assumptions introduced via bare `require`, and a setup built with `--skip-llm`, whose summaries are static-only). Name the property classes from `references/property-classes.md` that produced no property for any component, with the one-line reason Phase 4 recorded for each. A reader needs to know which questions were asked and came back empty, and which were never asked. List every line added to the user's sources, from `certora/analysis/source_edits.json`, and the lines autosetup added to `.gitignore` and `.gitattributes` (see `git diff`).
 - Method difficulty: the ranking from `certora/analysis/method_difficulty.json`, each summary Phase 5 added with the function it replaces, the sanity time before and after, and the status of its soundness rule. A summary is a trust assumption until its soundness rule is VERIFIED, so a reviewer needs to see both.
+- Property sources: when the hosted property generator ran, say which properties it produced and which the local round added, the properties it produced that Phase 4 dropped with the reason for each, its run id, and the amount it charged (`run.billing.charged_usd`). When it did not run, say why in one line.
 - Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, `unprivileged` before `trusted_party` and `self_harm`, then prover-limitation gaps and skips with reasons, and links to the prover runs.
