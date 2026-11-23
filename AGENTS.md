@@ -24,7 +24,7 @@ contract X with the prover", "write a Certora spec for X and run it".
 
 ## What to read
 
-`SKILL.md` is the flow of record: phases 0-7. Read it in full before acting. It names seven
+`SKILL.md` is the flow of record: phases 0-7. Read it in full before acting. It names eight
 references, each read when its phase needs it:
 
 - `references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
@@ -34,6 +34,7 @@ references, each read when its phase needs it:
 - `references/cvl-pitfalls.md`, prover traps that are on no single docs page
 - `references/prover-loop.md`, building confs, running `certoraRun`, reading results
 - `references/timeout-resolver.md`, handing a timed-out rule to the hosted Timeout Resolver and applying what it returns
+- `references/runs-api.md`, the Certora Runs API rules both hosted services share: key, errors, idempotency, waiting, cost
 
 `evals/evals.json` is a dev-time eval set for working on the skill, not part of running it.
 Two of its three evals submit real cloud prover jobs and cost money.

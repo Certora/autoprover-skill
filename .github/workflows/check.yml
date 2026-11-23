@@ -49,6 +49,7 @@ jobs:
                    plugins/certora-autoprover/skills/certora-autoprover/references/prover-loop.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/timeout-resolver.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/property-generation.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/runs-api.md \
                    plugins/certora-autoprover/skills/certora-autoprover/evals/evals.json \
                    plugins/certora-autoprover-solana/LICENSE \
                    plugins/certora-autoprover-solana/.claude-plugin/plugin.json \

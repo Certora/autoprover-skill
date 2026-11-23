@@ -2,9 +2,9 @@
 
 The hosted property generator is AutoProver's own property formulation, run as a service. Give it a repository, a commit and a main contract. It analyzes the contract, groups it into components, formulates invariants, safety properties and attack vectors, reviews them, and ranks them across the contract. It writes no specs and runs no prover jobs.
 
-You drive it through the Certora Runs API, the same API as the Timeout Resolver (`timeout-resolver.md`). Its sections *How the API answers*, *Waiting* and the idempotency rules of *Starting a run* apply here unchanged. This page says only what differs.
+You drive it through the Certora Runs API. `runs-api.md` holds what every Runs API service shares: the key, how the API answers, starting a run exactly once, waiting, reading the result, and cost. This page says what is the generator's own.
 
-When the project qualifies, it is the default source of Phase 4's properties. When it does not, or the organization's balance cannot cover the run, or the run ends without a property set, Phase 4 drafts the properties itself. Neither path blocks the flow.
+When the project qualifies, it is the default source of Phase 4's properties. When it cannot run, Phase 4 drafts the properties itself. Neither path blocks the flow.
 
 ## When the project qualifies
 
@@ -13,11 +13,11 @@ The service clones the project from GitHub, so it sees a commit, not your workin
 - The project root is inside a git repository whose `origin` remote is on `github.com`. Write `<repo>` for its `https://github.com/<owner>/<name>` form, without `.git`.
 - Write `<sha>` for the full `git rev-parse HEAD`. Whether GitHub has that commit is for the estimate to say (*Estimate*), since a shallow clone cannot tell.
 - `git status --porcelain` lists no change to a `.sol` file. Changes elsewhere do not matter.
-- The key in `CERTORAKEY` holds `runs:create` and `runs:read`, read from `GET <base>/v2/access` (`key.scopes`). `runs:cancel` is useful, not needed.
+- The key in `CERTORAKEY` holds `runs:create` and `runs:read` (`runs-api.md`, *The key*). `runs:cancel` is useful, not needed.
 
-If one fails, say which, and draft the properties locally. Do not push, commit or stash for the user to make a project qualify.
+## When something blocks it
 
-`<base>` is `https://app.certora.com`.
+A failed check above, a refused estimate (*Estimate*) and a refused launch (*Launching*) each name a cause the user can usually fix: commit and push the `.sol` changes, push the commit, create a key with the permissions, install the organization's Certora GitHub app on the repository, or top up the balance. Tell the user which one it is, and what would fix it. Then ask whether they want to fix it before you continue. When they have, run the checks and the estimate again. When they decline, or the request said to work without asking, draft the properties locally and continue. Do not push, commit or stash yourself.
 
 ## Estimate
 
@@ -36,31 +36,33 @@ The estimate is free and holds nothing. `POST <base>/v2/auto-prover-runs/estimat
 }
 ```
 
-`contract.path` is relative to the repository root, which is not always the project root. Add `"documents": { "design": "<path>" }` when Phase 1 found a design document that is committed at `<sha>`; the path is relative to the repository root and must be a Markdown (`.md`, `.markdown`) or PDF file. `<key>` is the idempotency key from the next section.
+`contract.path` is relative to the repository root, which is not always the project root. Add `"documents": { "design": "<path>" }` when Phase 1 found a design document that is committed at `<sha>`; the path is relative to the repository root and must be a Markdown (`.md`, `.markdown`) or PDF file. `<key>` is the idempotency key from *Launching*.
 
-Choose `authentication.type` before the first estimate, and send one estimate. Ask GitHub without credentials, `curl -s -o /dev/null -w '%{http_code}' https://api.github.com/repos/<owner>/<name>`: `200` means the repository is public, so the type is `public`; any other answer means `organization_github_app`, which reads a private repository through the organization's Certora GitHub app. A `422` with code `source_revision_not_found` means the service cannot read that commit with that type: draft locally, and tell the user why it may be: the commit is not pushed, or the organization's Certora GitHub app is not installed on the repository. Do not retry with the other type. A token the user saved in the web app does not reach the API.
+Choose `authentication.type` before the first estimate, and send one estimate. Ask GitHub without credentials, `curl -s -o /dev/null -w '%{http_code}' https://api.github.com/repos/<owner>/<name>`: `200` means the repository is public, so the type is `public`; any other answer means `organization_github_app`, which reads a private repository through the organization's Certora GitHub app. A token the user saved in the web app does not reach the API.
 
-The reply holds `estimate.estimated_cost_usd`, `estimate.balance_usd`, `estimate.can_launch` and `estimate.estimate_quote_id`. The launch holds about twice the estimate on the organization's balance and refunds what the run does not use. If `can_launch` is true, launch without asking the user. If it is false, say why in one line and draft locally. Tell the user in one line that the generator was launched, with the estimate, and that it runs while Phases 2 and 3 continue. A small contract takes minutes; a large one takes longer.
+The reply holds `estimate.estimated_cost_usd`, `estimate.balance_usd`, `estimate.can_launch` and `estimate.estimate_quote_id`. The launch holds about twice the estimate on the organization's balance and refunds what the run does not use. If `can_launch` is true, launch without asking the user, and tell them in one line that the generator was launched, with the estimate, and that it runs while Phases 2 and 3 continue. A small contract takes minutes; a large one takes longer.
+
+Two answers block it (*When something blocks it*). `can_launch` false means the balance cannot cover the hold. A `422` with code `source_revision_not_found` means the service cannot read that commit with that type: the commit is not pushed, or the organization's Certora GitHub app is not installed on the repository. Do not retry with the other type.
 
 ## Launching
 
-Build the idempotency key from the input: `propgen-<name>-<sha>-<ContractName>`, where `<name>` is the repository name. It is at most 200 characters; shorten `<name>`, never `<sha>`. The same string is `client_reference`. Record the key and the exact body in `certora/propgen/keys.json` before the first send, and on a retry or a resume send the stored body under the stored key, as `timeout-resolver.md` (*Starting a run*) explains. A new key is a new paid run.
+Launch exactly once, as `runs-api.md` (*Starting a run exactly once*) describes. Build the idempotency key from the input: `propgen-<name>-<sha>-<ContractName>`, where `<name>` is the repository name. It is at most 200 characters; shorten `<name>`, never `<sha>`. The same string is `client_reference`. Record the key and the exact body in `certora/propgen/keys.json` before the first send.
 
 `POST <base>/v2/auto-prover-runs`, as JSON, with the bearer token, the header `Idempotency-Key: <key>`, the header `Estimate-Quote-Id: <estimate_quote_id>`, and the body of the estimate.
 
-A `402 insufficient_balance` means the balance cannot cover the hold: draft locally. The reply is otherwise `202` with a `run` object. Write `run.id` to `certora/propgen/run.json`. A `503 launch_outcome_unknown` is handled as in `timeout-resolver.md`: retry under the same key and body, never under a new one. To find a run that exists, read `GET <base>/v2/runs?run_type=auto_prover&client_reference=<key>`.
+The reply is `202` with a `run` object. Write `run.id` to `certora/propgen/run.json`. A `402 insufficient_balance` blocks it (*When something blocks it*). A `409 idempotency_conflict` means an earlier skill run launched the generator on the same commit and contract with another body, a different design document for one: list the runs for that `client_reference`, and use the run that exists. To find a run that exists, read `GET <base>/v2/runs?run_type=auto_prover&client_reference=<key>`.
 
 Launch right after Phase 1, so the run overlaps Phases 2 and 3. Do not wait for it there.
 
 ## Waiting
 
-When Phase 4 starts, wait for the run in the foreground, as `timeout-resolver.md` (*Waiting*) describes: poll `GET <base>/v2/runs/<run_id>` and stop at `succeeded`, `failed` or `cancelled`. Phases 2 and 3 usually cover most of the wait.
+When Phase 4 starts, wait for the run in the foreground, as `runs-api.md` (*Waiting*) describes. Phases 2 and 3 usually cover most of the wait.
 
 A `failed` or `cancelled` run has no property set. Quote `run.failure.code` and `run.failure.detail`, and draft locally. Do not launch a second run.
 
 ## Reading the property set
 
-`GET <base>/v2/runs/<run_id>/result`. The reply body is `{request_id, result}`. Check that `result.run_type` is `auto_prover` and `result.run_mode` is `property_generation`. Save `result.data.property_set` to `certora/propgen/property_set.json`.
+Read the result as `runs-api.md` (*Reading the result*) describes. Check that `result.run_type` is `auto_prover` and `result.run_mode` is `property_generation`. Save `result.data.property_set` to `certora/propgen/property_set.json`.
 
 ```json
 {
@@ -78,7 +80,7 @@ A `failed` or `cancelled` run has no property set. Quote `run.failure.code` and 
 
 `rank` orders the properties across the whole contract by importance, `1` first. It is `null` when the run did not rank them.
 
-`409 result_not_ready` means the set is still being finalized: poll a few more times. `409 result_unavailable` means the run ended without one: draft locally.
+A run that ends without a property set (`409 result_unavailable`) leaves Phase 4 to draft locally.
 
 ## Using it in Phase 4
 
@@ -96,4 +98,4 @@ Write `<slug>.properties.json` in its usual shape, `[{title, sort, description}]
 
 ## Cost
 
-`run.billing.reserved_usd` is the hold, and `run.billing.charged_usd` the settled charge, which `GET <base>/v2/runs/<run_id>` shows once the run settles. Phase 7 reports the charge. One run per skill run: a resume reads the stored run, never a new one.
+The run is charged as `runs-api.md` (*Cost*) describes. Phase 7 reports `run.billing.charged_usd`. One run per skill run: a resume reads the stored run, never a new one.
