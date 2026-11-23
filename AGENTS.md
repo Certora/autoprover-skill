@@ -24,15 +24,17 @@ contract X with the prover", "write a Certora spec for X and run it".
 
 ## What to read
 
-`SKILL.md` is the flow of record: phases 0-7. Read it in full before acting. It names six
+`SKILL.md` is the flow of record: phases 0-7. Read it in full before acting. It names eight
 references, each read when its phase needs it:
 
 - `references/autosetup.md`, `certora-autosetup` invocation, outputs, failure modes
+- `references/property-generation.md`, launching the hosted property generator and assigning its properties to components
 - `references/property-classes.md`, the questions to work through before drafting properties
 - `references/cvl-writing.md`, docs map, the CVL guidelines, the judge checklist
 - `references/cvl-pitfalls.md`, prover traps that are on no single docs page
 - `references/prover-loop.md`, building confs, running `certoraRun`, reading results
 - `references/timeout-resolver.md`, handing a timed-out rule to the hosted Timeout Resolver and applying what it returns
+- `references/runs-api.md`, the Certora Runs API rules both hosted services share: key, errors, idempotency, waiting, cost
 
 `evals/evals.json` is a dev-time eval set for working on the skill, not part of running it.
 Two of its three evals submit real cloud prover jobs and cost money.
@@ -60,9 +62,10 @@ When a tool is missing, it says what it will install and asks before it installs
 Three things to know before you stop over them:
 
 - `CERTORAKEY` carries one organization API key, for the prover and for the Certora Runs
-  API behind the Timeout Resolver. A run with no timeout never reaches that API, so a key
-  without its permissions still gets through the rest of the flow.
-  `references/timeout-resolver.md` lists the permissions the key needs.
+  API behind the hosted property generator and the Timeout Resolver. A key without the Runs
+  API permissions still gets through the flow: Phase 4 then drafts the properties itself.
+  `references/property-generation.md` and `references/timeout-resolver.md` list the
+  permissions each needs.
 - No Anthropic key is needed. The flow runs `certora-autosetup --skip-llm`, which turns off
   every LLM call autosetup makes. The variable is still read at import and only its
   non-emptiness is checked, never the value, so export a placeholder and move on. Summaries

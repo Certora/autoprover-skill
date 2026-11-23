@@ -17,7 +17,7 @@ with a reason. No formal-verification expertise needed.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
-  <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.6.9-blue?style=flat" alt="version 0.6.9"></a>
+  <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.7.0-blue?style=flat" alt="version 0.7.0"></a>
   <a href="plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md"><img src="https://img.shields.io/badge/version-0.2.1-blue?style=flat" alt="Solana version 0.2.1"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
@@ -82,7 +82,9 @@ proven or a bug is found.
 1. **Analyze** the project: its components, entry points and the contracts it calls.
 2. **Set up** the prover: compilers, contract links, and summaries, which are equivalent models
    of library code the prover cannot handle as written.
-3. **Derive** security properties from the code and any design document.
+3. **Derive** security properties from the code and any design document. When the project is
+   a pushed GitHub commit, the hosted property generator drafts them, and the agent adds what it
+   missed.
 4. **Formalize** them as Prover rules and invariants: CVL for Solidity, CVLR for Solana.
 5. **Prove** them. Each counterexample is checked: a mistake in the spec or setup is fixed, and
    a real violation is reported as a suspected bug.
@@ -114,10 +116,12 @@ and a `CERTORAKEY`; it checks for the rest of what it needs and installs it with
 nonlinear arithmetic and/or external dependencies. An interrupted run resumes where it stopped.
 
 **What does it cost?** No LLM key beyond your agent's own. The prover runs in the Certora cloud:
-2,000 free minutes per month, then paid; see [app.certora.com](https://app.certora.com).
+2,000 free minutes per month, then paid; see [app.certora.com](https://app.certora.com). The
+hosted property generator is charged per run to your organization's balance. The skill uses it
+when the balance covers the estimate, and drafts the properties itself otherwise.
 
 **Where does my code go?** The prover runs in the Certora cloud, so each prover job uploads the
-code it verifies. Your dashboard on [app.certora.com](https://app.certora.com) shows every
+code it verifies. The hosted property generator reads the commit from GitHub. Your dashboard on [app.certora.com](https://app.certora.com) shows every
 prover job with its results.
 
 **What can it verify?** Solidity, in a project that builds: one main contract per run,

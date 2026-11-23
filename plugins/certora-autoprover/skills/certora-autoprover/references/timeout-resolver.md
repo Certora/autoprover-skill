@@ -2,7 +2,7 @@
 
 The Timeout Resolver is a hosted AutoProver agent. Give it one prover run and one rule of that run. It searches for a pen-and-paper proof of the property and distills the lemmas the proof rests on. It instruments the source with inert hooks that encode those lemmas, discharges the lemmas in Lean, and runs the prover again. It returns patches for the source and the spec, the Lean file, and the evidence that the rule now verifies.
 
-You drive it through the Certora Runs API, the same API that drives AutoProver runs. Create a run, poll it, read its result, then list and download its artifacts. Every call is a plain HTTPS request with a Certora API key.
+You drive it through the Certora Runs API: create a run, poll it, read its result, then list and download its artifacts. `runs-api.md` holds what every Runs API service shares: the key, how the API answers, starting a run exactly once, waiting, reading the result, and cost. This page says what is the resolver's own.
 
 Use it in two cases:
 
@@ -13,39 +13,17 @@ Do not use it for `VIOLATED`, `SANITY_FAILED`, or `ERROR`. Those have their own 
 
 ## What it needs
 
-- The organization API key in the environment variable `CERTORAKEY`, the same key the prover runs on. The user creates it on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. Five permissions matter here: "Use Certora Prover", so that the same key runs `certoraRun`, and for the resolver "Create runs", "Read runs and results", "Cancel runs", and "Download artifacts". Permissions cannot be changed after the key is created. A key without "Download artifacts" completes the paid run and then cannot fetch one file. A key from the older `prover.certora.com` settings is not an organization API key, and the Runs API answers it with `401 invalid_api_key`. The Runs API also needs a plan that includes it. If the variable is empty, or the key lacks these permissions, stop and ask the user for a key that has them. Never print the key.
-- The API host. Production is `https://app.certora.com`. The dev and staging hosts are for Certora staff. This page writes that host as `<base>`.
+- The organization API key in `CERTORAKEY` (`runs-api.md`, *The key*). Five permissions matter here: "Use Certora Prover", so that the same key runs `certoraRun`, and for the resolver "Create runs", "Read runs and results", "Cancel runs", and "Download artifacts". A key without "Download artifacts" completes the paid run and then cannot fetch one file. If the variable is empty, or the key lacks these permissions, stop and ask the user for a key that has them.
 - The run link that `certoraRun` printed. Both shapes work. Send an app link (`<base>/orgs/<org>/jobs/<uuid>/report`) as it is, when its host is the API host. Send a legacy link (`https://prover.certora.com/output/<user>/<job>/`) without the `anonymousKey` part. The service strips that part in any case. The run and the key must belong to the same environment. A key from `app.certora.com` resolves runs on `prover.certora.com` and nothing else.
 - The rule name, and the property the rule formalizes: its `title`, `description`, and `sort` from `certora/properties/<slug>.properties.json`. The `rules` list in `certora/properties/<slug>.property_rules.json` maps the property to its rules.
 
 You must own the run, or be a member of the owner's organization with read access to it. The service checks this before it starts anything, and the job reads the run with your identity. An anonymous key grants nothing. In this flow you submitted the run yourself, so this holds.
 
-Before the first run, read the key's permissions from `GET <base>/v2/access`, by
-whatever means your agent has. Every call on this page carries the key as a bearer
-token, sends and receives JSON, and answers with a `request_id`.
-
-`key.scopes` must hold `runs:create`, `runs:read`, `runs:cancel`, and `artifacts:read`. If one is absent, name it, tell the user the key has to be created again with that permission, and stop. Do not test `capabilities.run_types`: it is the same fixed list for every key and proves nothing.
-
-The organization's own limits can show on any call, this one included. `403 plan_gate` means the plan does not include the Runs API, and its `detail` names the plan that does. `503 integration_disabled` means an administrator turned API access off. `503 app_disabled` means the resolver is off in this environment. Both 503s carry `retryable: true`, and neither clears by retrying. Report the code and continue with the manual playbook.
-
-## How the API answers
-
-A refused call answers with `application/problem+json`. The body holds `status`, `code`, `detail`, `retryable`, and sometimes `field_errors`. When you report a refusal, quote `code`, `detail`, and `request_id`. A 422 names the bad field in `field_errors`. A 429 carries a `Retry-After` header in seconds. Wait that long, then retry. Read `retryable` as a hint only: `code` decides, and this document names each code that is worth another call. A request body is capped at 256 KiB. A resolver request is far below that.
-
-These refusals can come from any call on this page:
-
-- `401 invalid_api_key`: the key is wrong, revoked, or not an organization API key. Stop and ask the user for a valid key.
-- `403 insufficient_scope`: the key lacks a permission the call needs. `detail` names it. Stop and ask for a key that has it.
-- `402 insufficient_balance`: the organization's balance cannot cover the hold. Tell the user to top up the balance, and launch nothing else.
-- `404 run_not_found`: the service cannot see the run you named, or the key belongs to another organization than the run's owner. Check the run link and the key.
-- `503 audit_backend_error`: the service could not reach its backend, and nothing started. Retry with the same idempotency key and the same body, a few seconds apart.
-- `409 idempotency_in_progress`: a request with the same key is still being handled. Wait the `Retry-After` seconds, then send the same request again.
-
-`409 idempotency_conflict` means the key is already bound to a different request. Any change to the body counts, a reworded property or summary among them. Reaching this refusal without meaning to is a sign that the body was rebuilt instead of replayed, and the first request launched. Do not mint a key to get past it. List the runs for that `client_reference`, and poll the run that exists. A new key belongs only to an attempt you mean to start, and its body is recorded with it.
+`key.scopes` must hold `runs:create`, `runs:read`, `runs:cancel`, and `artifacts:read`. If one is absent, name it, tell the user the key has to be created again with that permission, and stop. When an organization limit from `runs-api.md` (*The key*) shows, continue with the manual playbook.
 
 ## Starting a run
 
-Start one run per rule. The create call needs an `Idempotency-Key` header of 1 to 200 characters, and the same string goes in the body as `client_reference`. Build the key out of the input it launches: `<slug>-<ruleName>-<job>`, where `<job>` is the job segment of the run link. If that is longer than 200 characters, shorten the slug and the rule name, never the job. The record behind a key never expires once it holds a run or a balance hold. A key reused against a later prover run therefore arrives with a different body, and it earns `409 idempotency_conflict` in place of a run. When you first send a key, write it and the exact body you sent to `certora/resolver/keys.json`, under its component and rule. On a retry or a resume, send the stored body under the stored key. Do not build the request again, because a body you rebuild is a body that can differ. A retry with the same key and the same body returns the same run and starts nothing. A fresh key starts a new run, and a new run is a new charge.
+Start one run per rule, exactly once, as `runs-api.md` (*Starting a run exactly once*) describes. Build the idempotency key out of the input it launches: `<slug>-<ruleName>-<job>`, where `<job>` is the job segment of the run link. If that is longer than 200 characters, shorten the slug and the rule name, never the job. A key reused against a later prover run arrives with a different body, a reworded property or summary among the changes, and it earns `409 idempotency_conflict` in place of a run. Record the key and the exact body in `certora/resolver/keys.json`, under its component and rule.
 
 `POST <base>/v2/timeout-resolver-runs`, as JSON, with the bearer token and an
 `Idempotency-Key` header holding `<slug>-<ruleName>-<job>`. The body:
@@ -73,39 +51,17 @@ Optional fields:
 
 The reply is `202` with a `run` object. Keep `run.id`. Record it in the commentary file of the component.
 
-A `503 launch_outcome_unknown` is the one refusal that leaves the outcome open: the run has possibly started. Retry the create call with the original key and the unchanged body, a few seconds apart. The service looks for a recovered run before it replays anything, so the original key is what surfaces a run that did start. Never mint a second key for the same attempt, because that starts a second paid run. A `202` naming a run settles it, whether that is the replayed success or a run the service recovered: poll that run. Another `launch_outcome_unknown`, or a `503 launch_recovery_pending`, means the outcome is still open. Retry the same key about five times over a few minutes, then stop and hand the user the key and the run link. Launch nothing else.
-
-The run list tells you whether a run exists:
-
-Read `GET <base>/v2/runs?run_type=timeout_resolver&client_reference=<slug>-<ruleName>-<job>`.
-
-A run in the list is the one to poll. An empty list proves nothing: `client_reference` is written only after a launch returns a run id, so an ambiguous launch leaves it unset while the run exists. An empty list is never permission to create.
+A `503 launch_outcome_unknown` is handled as `runs-api.md` describes. To find a run that exists, read `GET <base>/v2/runs?run_type=timeout_resolver&client_reference=<slug>-<ruleName>-<job>`.
 
 ## Waiting
 
-A run takes between 30 minutes and a few hours. Wait for it in the foreground, the same way `prover-loop.md` (*Waiting for a run*) waits for a prover job. Each wait is one shell call that polls `GET <base>/v2/runs/<run_id>` every 60 seconds, with the key in an `Authorization: Bearer` header, and stops after 90 seconds at most. Save each reply to a file and read it with the `ai-composer` tool's Python. The reply has `run.status`. A refusal has no `run`, and its `status` and `code` say why. The call ends early when the run reaches `succeeded`, `failed` or `cancelled`, or when the reply is a 4xx refusal.
-
-A `429` refusal means wait and make the same call again. Any other 4xx refusal means stop polling and report the code: the key was revoked, lost a permission, or names another organization, and polling again does not change that. If the status is still another value, write a one-line progress note (elapsed time and the status) and make the same call again. Repeat until the run is `succeeded`, `failed` or `cancelled`. The bound follows the rule in `prover-loop.md`: 90 seconds fits a 2-minute shell timeout, and a longer bound needs a longer timeout passed on every call. Do not wait through a background monitor, a timer or a turn that ends in the hope of a notice. A sub-agent that started the run never ends its turn while the run is moving.
-
-`run.status` is one of `queued`, `running`, `finalizing`, `succeeded`, `failed`, `cancelling`, `cancelled`. Stop polling at `succeeded`, `failed`, or `cancelled`. The other values mean the run is still moving. `run.progress` is null while the run is `queued`. From `running` on, `run.progress.phase` names the current step.
-
-`succeeded` means the agent finished and wrote a result. It does not mean the rule verified. Read the result document for that. `run.result.available` says whether that document can be served. It stays false on a succeeded run whose document was never written. `failed` means the run did not complete. Then `run.failure` holds `code`, `detail`, and `retryable`. Quote `code` and `detail` in your report. Do not start a new run because `retryable` is true. Ask the user first.
-
-To stop a run, cancel it:
-
-`POST <base>/v2/runs/<run_id>/cancel`, as JSON, with an empty object as the body.
-
-A `202` means the cancellation was taken, and the run moves through `cancelling` to `cancelled`. A `200` means the run was past cancelling already, `finalizing` included, and the reply's `run.status` is the real state. Neither answer is an error.
+A run takes between 30 minutes and a few hours. Wait for it in the foreground, as `runs-api.md` (*Waiting*) describes. `succeeded` means the agent finished and wrote a result. It does not mean the rule verified: read the result document for that. To stop a run, cancel it (`runs-api.md`, *Waiting*).
 
 ## Reading the result
 
-Read the result document once the run is `succeeded`. It is not a downloadable artifact, and this route is the only way to read it.
+Read the result document once the run is `succeeded`, as `runs-api.md` (*Reading the result*) describes. It is not a downloadable artifact, and that route is the only way to read it. The document has a `schema_version` of its own, the integer `1`. Inside `result.data`, rely on `operation`, `status`, `message`, `run`, `products`, `outcome`, `compiler_output`, and `error`. Every one of those keys is always there. An unpublished or unreached value is `null`, and `products.patches` is then `[]`. Decide on the value, never on the presence of the key. Do not depend on anything else.
 
-Read `GET <base>/v2/runs/<run_id>/result`.
-
-The reply body is `{request_id, result}`. The document is `result.data`. The envelope carries `result.schema_version`, the string `"1"`, beside `result.run_id` and `result.run_type`. The document has a `schema_version` of its own, the integer `1`. Inside `result.data`, rely on `operation`, `status`, `message`, `run`, `products`, `outcome`, `compiler_output`, and `error`. Every one of those keys is always there. An unpublished or unreached value is `null`, and `products.patches` is then `[]`. Decide on the value, never on the presence of the key. Do not depend on anything else.
-
-A refusal on this route is not always a wait. `409 result_not_ready` means the document is not there yet, and the artifact route answers `409 artifacts_not_ready` for the same reason. Poll both a few more times. If a succeeded run keeps answering 409, the document was never written: report that and continue with the manual playbook. `502 result_unavailable` means the document is there but cannot be served. The artifacts still list, so download them and read `proof.md`. `409 result_unavailable` means the run ended without a document: a failed or cancelled run, or a succeeded run whose `run.result.available` is false. Never start a second run to get around any of these.
+The artifact route answers `409 artifacts_not_ready` for the same reason the result answers `409 result_not_ready`. Poll both a few more times. If a succeeded run keeps answering 409, the document was never written: report that and continue with the manual playbook. `502 result_unavailable` means the document is there but cannot be served. The artifacts still list, so download them and read `proof.md`.
 
 Take these from `result.data`:
 
@@ -151,4 +107,4 @@ For `invalid_input`, the request did not match the run. Read `message` and corre
 
 ## Cost
 
-A resolver run is charged to your organization's balance. At launch the service holds a fixed amount, and at settlement it refunds the unused part. `run.billing.reserved_usd` is the hold and `run.billing.charged_usd` the settled charge. Before a launch, read `billing.balance_usd` from `GET <base>/v2/access`. If it is below the hold, tell the user before you launch. Start one resolver run per rule, not one per iteration. If a rule times out again after a resolution, go back to the manual playbook before starting a second run.
+A resolver run is charged as `runs-api.md` (*Cost*) describes. At launch the service holds a fixed amount. Before a launch, read `billing.balance_usd` from `GET <base>/v2/access`. If it is below the hold, tell the user before you launch. Start one resolver run per rule, not one per iteration. If a rule times out again after a resolution, go back to the manual playbook before starting a second run.
