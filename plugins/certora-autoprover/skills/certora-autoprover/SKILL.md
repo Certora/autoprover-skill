@@ -13,7 +13,7 @@ compatibility: >-
   project is a pushed GitHub commit and the organization's balance covers it, and the hosted Timeout Resolver the skill can fall back
   on, the same key needs the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.7.0"
+  version: "0.7.1"
   author: certora
 ---
 
@@ -129,6 +129,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
 - The main contract file exists, declares the named contract, and it is a concrete `contract` (not `abstract`/`interface` — the setup rejects those).
 - Optional: the key in `CERTORAKEY` also carries the Runs API permissions. The hosted property generator needs `runs:create` and `runs:read` (`references/property-generation.md`), and the Timeout Resolver needs those two plus `runs:cancel` and `artifacts:read` (`references/timeout-resolver.md`). Their absence blocks nothing here: Phase 4 then drafts the properties itself, and Phase 6 uses the resolver only when a rule times out and the manual fixes are exhausted. Note what is missing, and if a timeout later calls for the resolver, ask the user for a key that has them.
+- Hosted runs go through the Runs API at `app.certora.com/v2` and nothing else. Never start, cancel or read one on the data API (`/v1/domain/aiss/`), with `certora-cloud`, or with a script that calls either. A run started there does not appear in the organization's History and skips billing (`references/runs-api.md`, *Only through the Runs API*). When the Runs API cannot take a run you need, tell the user and stop.
 
 ## Phase 1 — Design document (optional but valuable)
 

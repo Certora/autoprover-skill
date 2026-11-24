@@ -4,17 +4,27 @@ The hosted property generator (`property-generation.md`) and the Timeout Resolve
 
 Every call is a plain HTTPS request, by whatever means your agent has. Every call carries the key as a bearer token, sends and receives JSON, and answers with a `request_id`. `<base>` is `https://app.certora.com`.
 
+## Only through the Runs API
+
+Start, follow, cancel and read every hosted run through `<base>/v2`, and through nothing else. The Runs API is what puts the run in the organization's History on `app.certora.com`, where it shows as `<member> (api)`. It also holds and settles the run's cost, and it records the idempotency key that makes a retry safe.
+
+Never start, cancel or read a hosted run on the data API: no call to `/v1/domain/aiss/` on `data-api.certora.com` or `prover.certora.com`, no `certora-cloud aiss` command, and no script that makes those calls. Do this even when the data API accepts the key. Some keys get through there, and that does not make the route allowed. A run started on the data API is missing from the organization's History. It also skips the balance hold and the settlement, and it has no idempotency record, so nothing stops a retry from starting a second paid run.
+
+If the Runs API does not take what you need, such as a language, a run type, or an input like a threat model, tell the user what is missing and stop. Do not route around it.
+
+This skill uses the data API for one thing only: reading your own `certoraRun` jobs through `prover-cli` (`prover-loop.md`).
+
 ## The key
 
 The organization API key is in the environment variable `CERTORAKEY`, the same key the prover runs on. The user creates it on the API Access page of the organization, which is the **API** entry in the sidebar at `app.certora.com`. Each service's page lists the permissions it needs. Permissions cannot be changed after the key is created. A key from the older `prover.certora.com` settings is not an organization API key, and the Runs API answers it with `401 invalid_api_key`. The Runs API also needs a plan that includes it. Never print the key.
 
-Before the first run of a service, read the key's permissions from `GET <base>/v2/access`. `key.scopes` lists them. Do not test `capabilities.run_types`: it is the same fixed list for every key and proves nothing. `billing.balance_usd` is the organization's balance.
+Before the first run of a service, read the key's permissions from `GET <base>/v2/access`. `key.scopes` lists them. Do not test `capabilities.run_types`: it is the same fixed list for every key and proves nothing. `capabilities.github_app_connected` says whether the organization's Certora GitHub app is connected, which a private repository needs. `billing.balance_usd` is the organization's balance.
 
 The organization's own limits can show on any call, this one included. `403 plan_gate` means the plan does not include the Runs API, and its `detail` names the plan that does. `503 integration_disabled` means an administrator turned API access off. `503 app_disabled` means the service is off. Both 503s carry `retryable: true`, and neither clears by retrying. Report the code and continue without the service.
 
 ## How the API answers
 
-A refused call answers with `application/problem+json`. The body holds `status`, `code`, `detail`, `retryable`, and sometimes `field_errors`. When you report a refusal, quote `code`, `detail`, and `request_id`. A 422 names the bad field in `field_errors`. A 429 carries a `Retry-After` header in seconds. Wait that long, then retry. Read `retryable` as a hint only: `code` decides, and these pages name each code that is worth another call. A request body is capped at 256 KiB.
+A refused call answers with `application/problem+json`. The body holds `status`, `code`, `detail`, `retryable`, and sometimes `field_errors`. When you report a refusal, quote `code`, `detail`, and `request_id`. A 422 names the bad field in `field_errors`, keyed by its body path, query parameter or header (`headers.estimate-quote-id`). `detail` is for people and its wording can change: branch on `status` and `code`. A 429 carries a `Retry-After` header in seconds. Wait that long, then retry. Read `retryable` as a hint only: `code` decides, and these pages name each code that is worth another call. A request body is capped at 256 KiB.
 
 These refusals can come from any call:
 
@@ -24,6 +34,10 @@ These refusals can come from any call:
 - `404 run_not_found`: the service cannot see the run you named, or the key belongs to another organization than the run's owner. Check the run and the key.
 - `503 audit_backend_error`: the service could not reach its backend, and nothing started. Retry with the same idempotency key and the same body, a few seconds apart.
 - `409 idempotency_in_progress`: a request with the same key is still being handled. Wait the `Retry-After` seconds, then send the same request again.
+
+## Rate limits
+
+The limits are per organization. They count only Runs API calls made with the organization's API keys, and dashboard activity is not counted. Over a rolling hour, an organization gets 1,000 general requests, 50 run creations, 120 estimates and 120 generated-file deliveries. Artifact listing is limited separately, to 30 requests per rolling minute. Downloading from a returned `download_url` counts against none of these. A call over a limit answers `429` with `Retry-After`. Never poll a run faster than every 15 seconds. The 60 seconds of *Waiting* stays well inside every limit.
 
 ## Starting a run exactly once
 
@@ -39,7 +53,9 @@ The service ties a key to the organization, the API key and the endpoint, and co
 
 A `503 launch_outcome_unknown` is the one refusal that leaves the outcome open: the run has possibly started. Retry the create call with the original key and the unchanged body, a few seconds apart. The service looks for a recovered run before it replays anything, so the original key is what surfaces a run that did start. Never mint a second key for the same attempt, because that starts a second paid run. A `202` naming a run settles it, whether that is the replayed success or a run the service recovered: poll that run. Another `launch_outcome_unknown`, or a `503 launch_recovery_pending`, means the outcome is still open. Retry the same key about five times over a few minutes, then stop and hand the user the key and the run link. Launch nothing else.
 
-The run list tells you whether a run exists: `GET <base>/v2/runs?run_type=<run_type>&client_reference=<key>`. A run in the list is the one to poll. An empty list proves nothing: `client_reference` is written only after a launch returns a run id, so an ambiguous launch leaves it unset while the run exists. An empty list is never permission to create.
+A launch reply carries `run.dashboard_url`, the run's page on `app.certora.com`. Give that link to the user when you tell them the run started, so they can follow it in the organization's History.
+
+The run list tells you whether a run exists: `GET <base>/v2/runs?run_type=<run_type>&client_reference=<key>`. A run in the list is the one to poll. The list is paged. While `next_cursor` is not null, ask again with `&cursor=<next_cursor>`. `limit` takes 1 to 100 and defaults to 50. An empty list proves nothing: `client_reference` is written only after a launch returns a run id, so an ambiguous launch leaves it unset while the run exists. An empty list is never permission to create.
 
 ## Waiting
 
@@ -61,4 +77,21 @@ Read the result once the run is `succeeded`: `GET <base>/v2/runs/<run_id>/result
 
 ## Cost
 
-A run is charged to the organization's balance. At launch the service holds an amount, and at settlement it refunds the unused part. `run.billing.reserved_usd` is the hold and `run.billing.charged_usd` the settled charge, which `GET <base>/v2/runs/<run_id>` shows once the run settles.
+A run is charged to the organization's balance. At launch the service holds an amount, and at settlement it refunds the unused part. `run.billing.reserved_usd` is the hold, and `run.billing.charged_usd` is the settled charge.
+
+`run.billing.status` moves through these values:
+
+- `reserved` while the run is queued;
+- `metering` while it runs;
+- `releasing` once it has failed or been cancelled, until the final charge is recorded;
+- `settled` once that charge is recorded.
+
+`charged_usd` is null until `settled`. A cancelled run can take a while to record its final usage, so report its charge only once `billing.status` is `settled`.
+
+What a run costs depends on how it ended:
+
+- **Succeeded:** the full plan-discounted price.
+- **Cancelled:** a partial amount for the work recorded up to the confirmed shutdown.
+- **Failed:** nothing. The one exception is a run that its budget cut short after it produced partial results, which is charged like a succeeded run.
+
+Estimates are free and hold nothing.
