@@ -13,7 +13,7 @@ compatibility: >-
   project is a pushed GitHub commit and the organization's balance covers it, and the hosted Timeout Resolver the skill can fall back
   on, the same key needs the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.7.0"
+  version: "0.7.1"
   author: certora
 ---
 
@@ -260,7 +260,7 @@ A safety_property can also state that something must be **possible**. "A holder 
 
 **Work `references/property-classes.md` before you draft.** It holds the questions to ask of any component: who absorbs a change in value over time, what going first is worth, which way each division rounds, what must not be blocked and who can block it, who the attacker is allowed to be, and the rest. Naming a failure mode is not the same as asking a question. That is why a component ends up with twenty properties about one surface and none about the other. For each class, record the property it produced, or one line on why this component does not expose that surface. The record goes in the round's reasoning, and Phase 7 reads it for the coverage section.
 
-Hard rules: derive from first principles — what the code SHOULD do, not what it currently does. Quality over quantity: no padding, no reframed duplicates, no trivial corollaries, no properties whose violation has no consequence. Exclude what the prover can't or shouldn't check: off-chain events (key compromise, phishing), hash-collision reasoning, event emission, and anything already guaranteed by the type system (overflow reverts in Solidity ≥0.8 are uninteresting).
+Hard rules: derive from first principles — what the code SHOULD do, not what it currently does. Quality over quantity: no padding, no reframed duplicates, no trivial corollaries, no properties whose violation has no consequence. Exclude what the prover can't or shouldn't check: off-chain events (key compromise, phishing), hash collisions that cost an attacker 2^128 hashes or more (a full `keccak256`, for example; `references/hash-collisions.md` says which collisions are cheaper and must be checked), event emission, and anything already guaranteed by the type system (overflow reverts in Solidity ≥0.8 are uninteresting).
 
 **Formalization direction is the same for all three sorts, and it is load-bearing:** every rule/invariant must be written so that VERIFIED means "the good thing holds / the bad thing cannot happen." An attack_vector is formalized as *the attack cannot occur*, not as *the attack occurs* — so a green result testifies to the **absence** of the problem, never its presence. If you catch yourself writing a rule that passes exactly when the exploit succeeds, invert it. (This is what makes a VIOLATED result meaningful in Phase 7 — see the expected-failure handling in `references/prover-loop.md`.)
 
