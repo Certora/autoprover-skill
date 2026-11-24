@@ -20,7 +20,7 @@
     },
     {
       "name": "certora-autoprover-solana",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "description": "End-to-end formal verification of a Solana program with the Certora Solana Prover. Given an Anchor, Pinocchio, jiminy or solana-program crate, this skill analyzes the program's instructions and accounts, scaffolds a CVLR harness into the crate behind a cargo feature, formulates security properties (invariants, safety properties, attack vectors) per component, formalizes them as CVLR rules, and iterates the prover until every rule is verified, excused as a suspected bug, or skipped with justification \u2014 ending with a verification report.",
       "source": {
         "source": "local",

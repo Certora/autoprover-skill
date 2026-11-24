@@ -136,3 +136,9 @@ then fails inside `anchor-lang` itself, treat it as the 0.28 case.
 
 In each case, name the crate that blocks and the version it requires, so the user can decide
 whether a port is worth it.
+
+The cases above are about clearing a refusal of `setup`, before the run. A patched copy of a
+dependency that removes a prover blocker during Phase 6 is a different case: `prover-blockers.md`,
+beside this file, names the function to change and why the change keeps its behaviour. It uses the
+mechanics of this file but not its go-ahead: it is recorded and reported, and the run does not stop
+for it.
