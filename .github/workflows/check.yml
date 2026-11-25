@@ -42,23 +42,11 @@ jobs:
                    plugins/certora-autoprover/.claude-plugin/icon.png \
                    plugins/certora-autoprover/skills/certora-autoprover/SKILL.md \
                    plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/autosetup.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/property-classes.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/cvl-writing.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/cvl-pitfalls.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/prover-loop.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/timeout-resolver.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/references/property-generation.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/SOLANA_AUTOPROVER_REF.txt \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/solidity.md \
+                   plugins/certora-autoprover/skills/certora-autoprover/references/solana.md \
                    plugins/certora-autoprover/skills/certora-autoprover/references/runs-api.md \
-                   plugins/certora-autoprover/skills/certora-autoprover/evals/evals.json \
-                   plugins/certora-autoprover-solana/LICENSE \
-                   plugins/certora-autoprover-solana/.claude-plugin/plugin.json \
-                   plugins/certora-autoprover-solana/.claude-plugin/icon.png \
-                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md \
-                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/AUTOPROVER_REF.txt \
-                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/references/property-classes.md \
-                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/references/dependency-moves.md \
-                   plugins/certora-autoprover-solana/skills/certora-autoprover-solana/evals/evals.json; do
+                   plugins/certora-autoprover/skills/certora-autoprover/evals/evals.json; do
             if [ -z "$(git ls-files -- "$f")" ]; then
               echo "::error file=$f::$f is not tracked, so a clone will not have it"
               missing=1
@@ -253,14 +241,13 @@ jobs:
           done
           exit $bad
 
-      # One pin per skill, and the only copy of it. The agent reads this file
-      # in Phase 0, so a SHA written into prose is a second copy that will drift.
+      # Each chain's local workflow reads its toolchain pin from disk.
       - name: The AutoProver pins are files, and nothing duplicates them
         run: |
           set -eu
-          pins=$(git ls-files 'plugins/*/skills/*/AUTOPROVER_REF.txt')
+          pins=$(git ls-files 'plugins/*/skills/*/*AUTOPROVER_REF.txt')
           if [ -z "$pins" ]; then
-            echo "::error::no plugins/*/skills/*/AUTOPROVER_REF.txt is tracked"
+            echo "::error::no plugins/*/skills/*/*AUTOPROVER_REF.txt is tracked"
             exit 1
           fi
           for pin in $pins; do
@@ -272,7 +259,7 @@ jobs:
             echo "ok  $pin is $ref"
           done
           if git ls-files '*.md' | xargs grep -nE '\b[0-9a-f]{40}\b' ; then
-            echo "::error::a 40-character SHA appears in Markdown; the pin belongs only in AUTOPROVER_REF.txt"
+            echo "::error::a 40-character SHA appears in Markdown; toolchain pins belong in their ref files"
             exit 1
           fi
           echo "ok  no Markdown file carries a SHA"
