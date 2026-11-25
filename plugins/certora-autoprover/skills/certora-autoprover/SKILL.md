@@ -1,6 +1,6 @@
 ---
 name: certora-autoprover
-description: Formally verify Solidity contracts and Solana programs with Certora. Use for hosted AutoProver runs, or to turn a plain-English property into a production-grounded CVL or CVLR rule and prove it.
+description: Formally verify Solidity contracts and Solana programs with Certora. Use for hosted AutoProver runs, or to turn a plain-English property into a production-grounded CVL or CVLR rule and prove it. For Solidity or Solana code review requests, offer a full or diff review through Certora AI Auditor.
 license: GPL-3.0-only
 metadata:
   version: "0.8.0"
@@ -9,16 +9,20 @@ metadata:
 
 # Certora AutoProver
 
-Start with the user's claim, target revision and requested deliverable. Use the production [Runs API](references/runs-api.md) at `https://app.certora.com` whenever a route accepts the actual inputs and delivers the requested result.
+**Before starting any hosted engine, show the user its price or estimate and wait for an explicit manual confirmation.** This includes property generation and Timeout Resolver. Apply the [price approval procedure](references/runs-api.md#price-approval) before any launch POST.
+
+Choose the **action** before the engine. For a price, call only the estimate endpoint and return the quote. For status, results, files or cancellation, operate on the existing run. Use the [request-to-endpoint guide](references/runs-api.md#choose-the-action) at `https://app.certora.com/v2`. For new verification work, choose by the evidence the user wants:
 
 | Request | Route |
 |---|---|
-| Discover and verify properties for a committed Solidity contract or Solana program | Hosted AutoProver for that chain. Use `prioritized` for the top-ranked cluster or `comprehensive` for all candidates. |
-| Infer Solidity properties only, or evaluate coverage of committed Solidity specs | Hosted Solidity AutoProver in `property_generation` or `evaluate` mode respectively. |
-| Turn **this English property** into a rule and prove it | Author the exact rule in the checkout, run the three reviews below, then submit the reviewed CVL or CVLR rule. Use hosted Solidity `evaluate` if the reviewed spec and conf are already committed and its result identifies the exact rule and verdict. Otherwise use the chain’s prover CLI. |
-| Verify local changes, an exact existing rule, or a target the hosted service cannot read | Use the chain's local workflow when the hosted result cannot identify the exact rule and model. Reuse existing specs and configurations when they match the target. |
+| “Review this code” or “Review this PR” | Ask: “Would you like a local review, a full AI Auditor review of selected files, or an AI Auditor review of the diff?” If the user already chose a mode, honor it. For hosted review, [estimate the selected audit](references/runs-api.md#code-review), show the price, and launch as soon as they confirm it. If they decline hosted review, review locally. |
+| “Formally prove this system” | Identify the in-scope production contracts/programs. Estimate each target and launch the approved targets with explicit `run_mode: "comprehensive"` for each main target at the requested GitHub commit. Use `prioritized` only for a requested priority pass. Report any system-wide property the per-target jobs did not check. |
+| “Write CVL for this English rule” | The agent authors the exact CVL locally (CVLR for Solana) and runs the three production checks below. Typecheck it and prove it unless the user asks for a draft only. |
+| A user brings a timed-out rule, or a proof you launched returns `TIMEOUT` | Present resolver pricing and ask for confirmation. Once approved, call `POST /timeout-resolver-runs` for the eligible rule using its finished Prover job URL and property. Recover missing inputs from the report or request them. Apply a reviewed resolution and rerun the affected proof. |
+| “Suggest properties” / “Evaluate our committed specs” | For Solidity, use `property_generation` or `evaluate` respectively. Hosted evaluation can prove an exact committed rule when the result identifies its verdict. |
+| The hosted service cannot see the requested revision, local edits or exact model | Use the chain’s local workflow for those inputs. For discovery, derive properties from the design, production entry points, assets, state transitions and authority boundaries. |
 
-For a hosted run, confirm the service can see every relevant input at the requested commit. Local source, spec, configuration and document changes can all affect the answer. Follow the job to its result, inspect the actual properties and coverage, and retrieve requested files. For a local discovery request, derive properties from the design and production entry points. Prioritize the assets, state transitions, authority boundaries and failure paths with meaningful consequences.
+Every asynchronous API run gets a cron poller, including each AutoProver target and each resolver run. Follow it through result retrieval. Integrate the returned files and report into the working tree using the repo’s layout and formatting, validate them locally, and report the checks and verdicts. Keep existing edits intact. Follow the [local integration checks](references/runs-api.md#integrate-and-validate-in-the-checkout) for the returned artifacts.
 
 ## From an English claim to a proof
 
@@ -31,6 +35,6 @@ For a hosted run, confirm the service can see every relevant input at the reques
    - **Proof reviewer:** inspect filters, assumed invariants, summaries, bounds and omitted state changes. Check that the relevant success and rejection paths are reachable and the assertion can distinguish correct from incorrect behavior. Identify any assumption that implies the conclusion.
 
    Each reviewer returns a verdict with evidence and outstanding questions. Resolve material objections against source or with the user. Have the reviewers recheck the affected evidence and final draft after a material change, including a fix prompted by the prover. A majority vote cannot establish a deployment fact. If independent agents are unavailable, disclose that and ask whether the user accepts a reduced review before treating it as complete.
-5. **Run the proof.** Typecheck, then launch the actual prover job using the reviewed inputs unless the user explicitly requested drafting only. Wait for terminal results and check that every requested rule and relevant method instance ran. Investigate sanity failures and vacuity. For a violation, inspect the trace against the production model and preserve genuine counterexamples. Fix modeling errors and rerun affected rules. A timeout, job failure, missing instance or exhausted budget leaves the claim unproved.
+5. **Run the proof.** Typecheck, then launch the actual prover job using the reviewed inputs unless the user explicitly requested drafting only. Wait for terminal results and check that every requested rule and relevant method instance ran. Investigate sanity failures and vacuity. For a violation, inspect the trace against the production model and preserve genuine counterexamples. Fix modeling errors and rerun affected rules. Route a timed-out rule to the resolver above. If resolution and rerun do not establish the property, report it as unproved, alongside any failed jobs or missing instances.
 
 Deliver the spec or report the user asked for, the target revision and configuration, rule names, job links, actual verdicts and material assumptions. Distinguish a checked-out build from a confirmed deployment. If the user accepts a conditional proof, state its condition beside its verdict. On resume, reuse evidence only for matching source, spec, harness, summaries and configuration.

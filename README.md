@@ -1,6 +1,6 @@
 # Certora AutoProver
 
-Formally verify a Solidity contract or Solana program. Give the agent a project, a target, and optionally a property in plain English. It uses the Certora Runs API for supported requests. For a custom proof, it writes a CVL or CVLR rule, checks the rule against the production setup with three independent reviewers, submits it to the prover, and reports the result and assumptions.
+Formally verify a Solidity contract or Solana program. Give the agent a project, a target, and optionally a property in plain English. For a system-wide proof, the agent prices comprehensive AutoProver runs and waits for your explicit confirmation before launch. A timed-out rule triggers a separate price confirmation for Timeout Resolver. It monitors each hosted run with cron, integrates the results into the checkout, formats the changed files and checks them locally. For a custom proof, it writes a CVL or CVLR rule, checks the rule against the production setup with three independent reviewers, submits it to the prover, and reports the result and assumptions.
 
 > Prove that only an authorized signer can withdraw from the vault in `programs/vault`. The production program ID and account layout are in `docs/deployment.md`.
 

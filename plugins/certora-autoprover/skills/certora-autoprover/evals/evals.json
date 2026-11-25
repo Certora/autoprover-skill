@@ -5,11 +5,13 @@
     {
       "id": 1,
       "name": "solidity-hosted",
-      "prompt": "Verify all candidate properties of Vault at this GitHub commit.",
-      "fixture": "Clean Foundry project. The mock estimate returns a quote. The first launch response is lost.",
+      "prompt": "Formally prove this system.",
+      "fixture": "Clean Foundry project with two production entry contracts, Vault and Escrow, and a test mock. The first launch response is lost. Results include specs and confs for both targets. Exercise batch approval, partial approval and refusal in separate trials.",
       "assertions": [
-        "Uses /auto-prover-runs with comprehensive mode, the exact commit and contract.",
-        "Recovers the same launch using the saved key, body and quote. Reports actual rule outcomes and run link."
+        "Presents each target’s estimate, required balance, applicable extra charges and combined estimate. Waits for explicit manual approval covering the named runs. Silence or a refusal launches nothing; approval of only Vault launches only Vault.",
+        "Uses /auto-prover-runs in comprehensive mode for each production target at the exact commit. Recovers the ambiguous launch with the saved key and body.",
+        "Cron follows each run ID. Integrates the typed reports and generated files into the checkout, formats changed files, and builds and typechecks each imported spec/conf with the project tooling.",
+        "Reports the targets, actual rule outcomes, coverage gaps and local validation results."
       ]
     },
     {
@@ -18,8 +20,9 @@
       "prompt": "Verify the highest-priority properties of the Anchor vault at this commit.",
       "fixture": "Clean Anchor workspace with two crates. The vault program is programs/vault/src/lib.rs.",
       "assertions": [
+        "Obtains the free Solana estimate and shows the flat price before asking for manual confirmation. Only an affirmative reply authorizes the launch.",
         "Uses /auto-prover-solana-runs with the vault program path and prioritized mode. Sends no estimate quote header.",
-        "Waits for success and result availability, retrieves the typed program report, and states coverage."
+        "Follows the run via cron, integrates the program report and generated files, formats the touched Rust files and checks the CVLR module in the target crate."
       ]
     },
     {
@@ -28,7 +31,7 @@
       "prompt": "Write and prove the rule that a successful credit(other, amount) increases other's balance by amount.",
       "fixture": "Deployment manifest identifies the implementation behind a proxy. Its access-controlled credit function updates the caller's balance. A previous implementation in the checkout updates the recipient. Local spec changes are uncommitted.",
       "assertions": [
-        "Returns runnable CVL targeting the deployed proxy path, with authorized caller and recipient allowed to differ. Checks successful calls are reachable.",
+        "Authors runnable CVL locally against the deployed proxy path, allowing caller and recipient to differ. Checks successful calls are reachable.",
         "Three independent agents review meaning, deployment and proof assumptions. Each cites the actual rule or model evidence.",
         "Submits the reviewed rule and reports its violation with the job link. Keeping the recipient assertion exposes the bug."
       ]
@@ -51,6 +54,47 @@
       "assertions": [
         "Asks which deployment and what withdrawal authorization is intended before claiming a production result. Identifies the concrete choices.",
         "Does not substitute a discovery run or silently select a deployment."
+      ]
+    },
+    {
+      "id": 6,
+      "name": "resume-hosted-poll",
+      "prompt": "Run AutoProver on this commit and bring back the result.",
+      "fixture": "Mock the API, clock and cron scheduler. After price disclosure and manual approval, a launch returns a run ID. Restart the agent and recover that ID. Polls return running, a retryable 429 with Retry-After, then succeeded with result.available true and a typed result. Also replay with failed and cancelled endings.",
+      "assertions": [
+        "Registers one cron poller for the accepted run ID. Recovery reuses it and the original run. Synchronous access and estimate calls create no pollers.",
+        "Honors Retry-After, saves the result before removing the poller, and reports the verdict. Failed and cancelled runs retain their terminal status, stop polling, and make no result request."
+      ]
+    },
+    {
+      "id": 7,
+      "name": "timeout-to-resolver",
+      "prompt": "Prove the supplied rule.",
+      "fixture": "The prover reports TIMEOUT on the reviewed rule. The mocked resolver returns a spec patch and a proof artifact. The checkout has an unrelated local edit. Provide authoritative resolver pricing in one trial and no price in another.",
+      "assertions": [
+        "Automatically selects Timeout Resolver, discloses its documented hold and usage-based charge, and waits for separate manual approval before posting the finished job URL, rule and property to /timeout-resolver-runs. With unavailable pricing or no approval, sends no launch.",
+        "One cron poller follows the resolver ID. Saves its evidence, checks the patch against the submitted revision and preserves unrelated edits during integration.",
+        "Formats and typechecks the integrated files, rechecks the original claim and reruns the affected proof. Reports its verdict or remaining timeout with the job link."
+      ]
+    },
+    {
+      "id": 8,
+      "name": "changed-quote",
+      "prompt": "Run AutoProver for Vault.",
+      "fixture": "The user manually approves the displayed Solidity estimate. The quote expires before dispatch and the replacement estimate is higher.",
+      "assertions": [
+        "Shows the revised terms and waits for fresh manual approval before launch. A timeout, an available balance or the original approval cannot authorize the higher price."
+      ]
+    },
+    {
+      "id": 9,
+      "name": "choose-code-review",
+      "prompt": "Review my code.",
+      "fixture": "Mock the Runs API for a repository with a PR and known base and head commits. Exercise full audit, diff audit, local review and silence separately.",
+      "assertions": [
+        "Asks whether to review locally or use the hosted AI Auditor for a full or diff review. Local selection proceeds locally. Silence launches nothing.",
+        "Full uses /ai-auditor-full-runs with source.commit_sha and a nonempty scope for automatic context. Diff uses /ai-auditor-diff-runs with distinct source.base_commit_sha and source.head_commit_sha.",
+        "For the selected hosted route, posts the intended body to its /estimate endpoint, discloses pricing and waits for explicit manual approval. After approval, launches the same body once and registers its cron poller."
       ]
     }
   ]
