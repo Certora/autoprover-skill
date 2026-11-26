@@ -29,21 +29,22 @@
       "id": 3,
       "name": "english-to-cvl",
       "prompt": "Write and prove the rule that a successful credit(other, amount) increases other's balance by amount.",
-      "fixture": "Deployment manifest identifies the implementation behind a proxy. Its access-controlled credit function updates the caller's balance. A previous implementation in the checkout updates the recipient. Local spec changes are uncommitted.",
+      "fixture": "Deployment manifest identifies the implementation behind a proxy. Its access-controlled credit function updates the caller's balance. A previous implementation in the checkout updates the recipient. Local spec changes are uncommitted. The CLI returns https://prover.certora.com/output/42/0123456789abcdef0123456789abcdef?anonymousKey=fixture and the owning organization slug is acme.",
       "assertions": [
         "Authors runnable CVL locally against the deployed proxy path, allowing caller and recipient to differ. Checks successful calls are reachable.",
         "Three independent agents review meaning, deployment and proof assumptions. Each cites the actual rule or model evidence.",
-        "Submits the reviewed rule and reports its violation with the job link. Keeping the recipient assertion exposes the bug."
+        "Keeps the recipient assertion, submits the reviewed rule and reports its violation with https://app.certora.com/orgs/acme/jobs/01234567-89ab-cdef-0123-456789abcdef/report. Omits the legacy URL and its query string.",
+        "Independently checks the counterexample against the deployed credit path. Alerts the user that authorized calls credit the wrong account, explains the accounting impact, justifies severity given caller permissions and recommends crediting the intended recipient."
       ]
     },
     {
       "id": 4,
       "name": "english-to-cvlr",
       "prompt": "Write and prove that only the vault owner can authorize withdrawal.",
-      "fixture": "Local Anchor program. Production enforces has_one and Signer in the instruction accounts. A direct handler harness bypasses both.",
+      "fixture": "Local Anchor program. An existing handler-only proof reports a violation. Production enforces has_one and Signer in the instruction accounts. The corrected instruction-level proof passes with clean sanity checks.",
       "assertions": [
         "Three independent reviewers inspect the rule, validation path and account construction. A handler-only check cannot substantiate the production claim.",
-        "Models and justifies the real validation boundary, covers an authorized success and checks rejection of an arbitrary unauthorized signer. Submits the CVLR rule and reports the actual outcome."
+        "Traces the violation to skipped account validation, corrects the harness and reruns the original claim. Covers authorized success and rejection of an arbitrary unauthorized signer. Reports the passing verdict and its scope without opening a production bug or launching another engine."
       ]
     },
     {
@@ -70,9 +71,11 @@
       "id": 7,
       "name": "timeout-to-resolver",
       "prompt": "Prove the supplied rule.",
-      "fixture": "The prover reports TIMEOUT on the reviewed rule. The mocked resolver returns a spec patch and a proof artifact. The checkout has an unrelated local edit. Provide authoritative resolver pricing in one trial and no price in another.",
+      "fixture": "An AutoProver report has one TIMEOUT, its Prover job link and a matching property. Mock an affordable $18 resolver hold, a returned spec patch and proof artifact, and an unrelated local edit. Repeat with an older production OpenAPI that omits the estimate route, with and without authoritative organization pricing.",
       "assertions": [
-        "Automatically selects Timeout Resolver, discloses its documented hold and usage-based charge, and waits for separate manual approval before posting the finished job URL, rule and property to /timeout-resolver-runs. With unavailable pricing or no approval, sends no launch.",
+        "Uses the timed-out rule's prover_link and name, matching (spec_file, name) against properties[].rule_refs for the title, description and sort.",
+        "Posts the intended body to /timeout-resolver-runs/estimate when deployed. Proactively offers to run the resolver for this rule, showing the current hold and usage-based settlement. On older deployments, obtains current organization pricing or leaves the run pending.",
+        "Launches /timeout-resolver-runs with the same body, a durable Idempotency-Key and no quote header only after separate manual price approval.",
         "One cron poller follows the resolver ID. Saves its evidence, checks the patch against the submitted revision and preserves unrelated edits during integration.",
         "Formats and typechecks the integrated files, rechecks the original claim and reruns the affected proof. Reports its verdict or remaining timeout with the job link."
       ]
