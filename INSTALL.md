@@ -51,11 +51,13 @@ Keep this repository accessible to the agent so it can read the files `SKILL.md`
 The skill installs its own tools the first time it runs. It says what it will install and asks
 you before it runs anything:
 
-- `certora-autosetup` and `certoraRun`, built with uv from the AutoProver repository at the
-  commit in `plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`.
+- `certora-autosetup`, `prover-cli` and `certoraRun`, built with `uvx` from the AutoProver
+  repository at the commit in `plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`.
+  `uvx` keeps the build in its cache and does not put the commands on your PATH. The skill
+  calls them through shims in `.certora_internal/autoprover/bin` inside your project.
 - `solc-select` 1.2.0, from PyPI, and the compiler versions your project's build configuration names.
 
-The tools belong to uv afterwards, so `uv tool uninstall` removes them.
+`solc-select` belongs to uv afterwards, so `uv tool uninstall` removes it. `uv cache clean` removes the builds.
 
 ## Updating
 
@@ -65,8 +67,8 @@ The tools belong to uv afterwards, so `uv tool uninstall` removes them.
 | A skill installer | Run the installer again for the same repository. |
 
 These update the skill. An update can change
-`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`. Then at its next run the skill
-sees that its tools come from another commit. It asks you before it reinstalls them.
+`plugins/certora-autoprover/skills/certora-autoprover/AUTOPROVER_REF.txt`. The skill writes its shims
+again at the start of every run, so its next run uses the new commit. It asks you before it builds it.
 
 ### Updating the AutoProver dependency
 
@@ -84,6 +86,7 @@ git ls-remote https://github.com/Certora/AutoProver master   # the current maste
 
 ```sh
 solc-select uninstall <version>             # each compiler, first
-uv tool uninstall ai-composer solc-select   # the tools
+uv tool uninstall solc-select               # the compiler manager
+uv cache clean                              # the AutoProver builds
 claude plugin uninstall certora-autoprover  # or remove the skill from your agent's skill directory
 ```
