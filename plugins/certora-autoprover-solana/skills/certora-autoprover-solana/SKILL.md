@@ -8,7 +8,7 @@ compatibility: >-
   Needs a CERTORAKEY for the Certora cloud prover and network access to prover.certora.com,
   crates.io, github.com and docs.certora.com. No model API key is needed.
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
   author: certora
 ---
 
@@ -76,7 +76,7 @@ Create the artifact directories up front: `mkdir -p certora/analysis certora/pro
 
 Fail fast with a specific message rather than improvising around a broken environment.
 
-- **`certora-cvlr`.** It is a command of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not on PyPI. The commit is pinned because this skill names its subcommands and flags: it is the single line in `AUTOPROVER_REF.txt`, the file beside this one. Run it through `uvx`, never `uv tool install`: the Solidity skill in this marketplace installs the same package as a tool at its own pin, and two installs at two pins would replace each other. `uv` must already be on PATH; if it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
+- **`certora-cvlr`.** It is a command of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not on PyPI. The commit is pinned because this skill names its subcommands and flags: it is the single line in `AUTOPROVER_REF.txt`, the file beside this one. Run it through `uvx`, never `uv tool install`: `uvx` keeps one cached environment per pin, so a new pin takes effect at the next run, and the Solidity skill in this marketplace can use another pin of the same package beside it. `uv` must already be on PATH; if it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
 
   Write a wrapper once, from the project root, substituting the pin for `<ref>`, and call it for every command below:
 

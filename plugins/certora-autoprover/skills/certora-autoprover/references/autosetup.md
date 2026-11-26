@@ -4,9 +4,9 @@ AutoSetup turns "a Foundry/Hardhat project + a main contract" into "a prover set
 
 ## Availability
 
-`certora-autosetup` (alias `autosetup`) must be installed and on PATH. It is NOT part of `pip install certora-cli`: it is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. The install command, with the pin it needs, lives in **SKILL.md Phase 0** and only there, so there is one copy of it to keep right.
+`certora-autosetup` is NOT part of `pip install certora-cli`: it is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. In this flow it is the `uvx` shim that **SKILL.md Phase 0** writes, with the pin it needs. That is the only copy of the command, so there is one copy to keep right.
 
-Two things about that install are worth knowing here. autosetup shells out to `certoraRun`, so certora-cli has to be on the same PATH, which is what `--with-executables-from certora-cli` arranges: `uv tool install` links the console scripts of the package it was given, not those of its dependencies. And exactly one of the `certora-cli`, `certora-cli-beta` and `certora-cli-beta-mirror` extras may be chosen: they are declared mutually exclusive and all ship the same `certora_cli` module.
+Two things about that environment are worth knowing here. `certora-autosetup` shells out to `certoraRun`, so certora-cli has to be on the same PATH: `uvx` puts the environment's own `bin`, which holds the `certoraRun` of the `[certora-cli]` extra, first on the PATH of the command it runs. And exactly one of the `certora-cli`, `certora-cli-beta` and `certora-cli-beta-mirror` extras may be chosen: they are declared mutually exclusive and all ship the same `certora_cli` module.
 
 Requires `ANTHROPIC_API_KEY` to be set to something in the environment (or a `.env` in the working directory), and the check fires at import time regardless of flags, so even `--skip-llm` runs need it set. What it tests is that the value is non-empty, never that it authenticates; with a `.env` present the file is loaded and the value is not tested at all. In this flow the value is a literal placeholder and goes nowhere. `CERTORAKEY` is needed for the cloud prover jobs it submits.
 

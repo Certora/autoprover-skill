@@ -13,7 +13,7 @@ compatibility: >-
   project is a pushed GitHub commit and the organization's balance covers it, and the hosted Timeout Resolver the skill can fall back
   on, the same key needs the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   author: certora
 ---
 
@@ -93,25 +93,30 @@ Never block a single command on a whole run, and never re-run one just to see mo
 
 This skill is standalone: it needs nothing beyond the tools below. Fail fast with a specific message rather than improvising around a broken environment:
 
-- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`), built from the AutoProver commit this skill pins. If they are missing or stale, you install them as described here. There is no separate installer. `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
+- `certoraRun`, `certora-autosetup` and `prover-cli`, all from the AutoProver commit this skill pins. `certora-autosetup` and `prover-cli` are commands of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not on PyPI, and `certoraRun` comes with it through the `[certora-cli]` extra. The commit is pinned because this skill describes `certora-autosetup` flags and behaviour that move with it: it is the single line in `AUTOPROVER_REF.txt`, the file beside this one. Run them through `uvx`, never `uv tool install` and never a copy the user already has: `uvx` keeps one cached environment per pin, so when the skill moves the pin, the next run builds the new commit, and an install from an older build or from a local checkout can never stand in for it. `uv` must already be on PATH; if it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
 
-  The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF.txt`, the file beside this one; read it and substitute it for `<ref>`:
+  At the start of every run, resumed runs included, write one shim per command from the project root, substituting the pin for `<ref>`:
 
   ```bash
-  GIT_CONFIG_COUNT=1 \
-  GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' \
-  GIT_CONFIG_VALUE_0='git@github.com:' \
-  uv tool install --python 3.12 --with-executables-from certora-cli \
-    'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@<ref>'
+  shims="$PWD/.certora_internal/autoprover/bin"            # a path with no space in it
+  mkdir -p "$shims"
+  for pair in certoraRun:certoraRun certora-autosetup:certora-autosetup \
+              prover-cli:prover-cli autoprover-python:python; do
+    cat > "$shims/${pair%%:*}" <<EOF
+  #!/bin/sh
+  exec env -u CERTORA \\
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0='url.https://github.com/.insteadOf' GIT_CONFIG_VALUE_0='git@github.com:' \\
+    uvx -q --python 3.12 --from 'ai-composer[certora-cli] @ git+https://github.com/Certora/AutoProver@<ref>' \\
+    ${pair#*:} "\$@"
+  EOF
+    chmod +x "$shims/${pair%%:*}"
+  done
+  export PATH="$shims:$PATH"
   ```
 
-  The `GIT_CONFIG_*` rewrite makes the build clone AutoProver's public `graphcore` submodule over HTTPS, so the install needs no GitHub SSH key.
+  Export that PATH in every shell that runs one of these commands, and give sub-agents the absolute path of the shim directory. Below, `certoraRun`, `certora-autosetup` and `prover-cli` mean these shims. `autoprover-python` is the Python of the same environment. The `GIT_CONFIG_*` rewrite clones AutoProver's public `graphcore` submodule over HTTPS, so no GitHub SSH key is needed. `env -u CERTORA` is load-bearing: a `CERTORA` variable in the environment makes the prover CLI refuse every submission before upload, with a message that names neither. `uvx` puts the environment's own `bin` first on PATH, so the `certoraRun` that `certora-autosetup` shells out to is the pinned one too.
 
-  When the commands are on PATH, also make sure that they come from the pinned ref: `uv tool list --show-version-specifiers` names the git source of `ai-composer`, and the commit in it must be the one in `AUTOPROVER_REF.txt`. A different commit means the skill was updated after the tools were built. Then add `--reinstall` to the command above.
-
-  Before you install or reinstall, tell the user what you will install: `ai-composer` with `certora-cli` from the AutoProver repository at that commit, and later `solc-select` and the project's compilers. Say that uv builds it and that it takes a few minutes. Ask for their go-ahead, and install only after they agree. `uv` itself must already be on PATH. If it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
-
-  Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. uv names the directory where it puts the tools, usually `~/.local/bin`. If that directory is not on PATH, use the full path for this session. Tell the user to add the directory to PATH. If the user declines or the install fails, stop and give the user the commands. Do not substitute or hand-roll a setup.
+  The first call at a new pin builds the package, which takes a few minutes; later calls reuse the build. Before that first call, tell the user what will be built (`ai-composer` with `certora-cli`, from the AutoProver repository at the pinned commit), and later `solc-select` and the project's compilers, and ask for their go-ahead. Then run `certoraRun --version` and `prover-cli --help`. If the user declines or the build fails, stop and give the user the commands. Do not substitute or hand-roll a setup.
 - `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make.
 
   autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key; a `.env` in the working directory is loaded instead and then nothing is checked at all. Nothing in this flow sends the value anywhere, so set the literal placeholder and move on. Do not read, copy or pass on whatever the user may already have in that variable:
@@ -182,7 +187,7 @@ forge compiler resolve --json -vv 2>certora/logs/forge-resolve.err
 For Hardhat, run autosetup's own extractor rather than parsing the config, which is code and can read the environment:
 
 ```bash
-extractor=$("$(uv tool dir)"/ai-composer/bin/python -c \
+extractor=$(autoprover-python -c \
   'import certora_autosetup, pathlib; print(pathlib.Path(certora_autosetup.__file__).parent / "build_systems/hardhat_config_extractor.js")')
 cd <project_root> && node "$extractor"
 ```
@@ -365,7 +370,7 @@ A skill run has a fixed prover budget: by default **500 prover jobs and 5000 pro
 Only cloud prover jobs count; a local run costs nothing. Every cloud `certoraRun` of the run passes `--group_id <group_id>`, the id in `budget.json`: autosetup's jobs (through `--extra-args`, `references/autosetup.md`), Phase 5's sanity runs, re-runs of the sanity spec, and every part of Phase 6. A typecheck (`--compilation_steps_only`) submits no job. The server lists the group's jobs with their runtimes, and this prints what is used, what is left, and the use per unit, taken from the first word of each job's `msg` (the parts' `msg` starts with the unit's slug):
 
 ```bash
-"$(uv tool dir)"/ai-composer/bin/prover-cli --budget --budget-file certora/logs/budget.json
+prover-cli --budget --budget-file certora/logs/budget.json
 ```
 
 A job that has not finished counts as 30 minutes, the job cap, or its time so far if that is longer. With `--more-jobs <K>` it also says whether `K` more jobs fit, at one job and 30 minutes each, and exits with code 3 when they do not. A job submitted moments ago may not be listed yet; the next count includes it.

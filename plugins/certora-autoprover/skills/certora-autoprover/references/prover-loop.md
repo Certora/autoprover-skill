@@ -31,7 +31,7 @@ Never hand-roll a conf — start from the autosetup base (`certora/confs/<Main>.
 
 Each job can take up to 30 minutes (`"global_timeout": 1800` caps it), longer than a single foreground command should hold your session. Aim for far less: see *Keep each run under about 30 minutes* below.
 
-With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Every run is submitted this way, a re-run after a fix included. First check that the parts fit the run's prover budget (SKILL.md, *Prover budget*): `"$(uv tool dir)"/ai-composer/bin/prover-cli --budget --budget-file certora/logs/budget.json --more-jobs <K>`, with `<K>` the number of parts, exits with code 3 when they do not. If they do not fit, do not submit. Then start the submission detached, with each part's output in its own log, never as certoraRun calls in the foreground:
+With `wait_for_results: none`, certoraRun compiles the part locally, uploads it, prints the job link and exits; the job runs in the cloud. Submit the parts one after another, never all at once: each certoraRun runs a local Java compile, and dozens of them at the same time exhaust the machine's memory. The commands below take every `certora/confs/<slug>-p*.conf` as a part of this run, so write each run's confs fresh: delete the component's old part confs first (`rm -f certora/confs/<slug>-p*.conf`), or a part left from an earlier, larger split is submitted again. A rule-filtered run is a single part, `<slug>-p1.conf`. Every run is submitted this way, a re-run after a fix included. First check that the parts fit the run's prover budget (SKILL.md, *Prover budget*): `prover-cli --budget --budget-file certora/logs/budget.json --more-jobs <K>`, with `<K>` the number of parts, exits with code 3 when they do not. If they do not fit, do not submit. Then start the submission detached, with each part's output in its own log, never as certoraRun calls in the foreground:
 
 ```bash
 cd <project_root>
@@ -59,7 +59,7 @@ Wait in the foreground, in two steps, each a bounded call repeated until it ends
 2. **Until every job has stopped.** Ask the server for the parts' jobs, by their links:
 
    ```bash
-   "$(uv tool dir)"/ai-composer/bin/prover-cli --wait <link> <link> ... --timeout 90
+   prover-cli --wait <link> <link> ... --timeout 90
    ```
 
    It checks every 30 seconds and prints one line per job with its status, then `ENDED` once every job has stopped, or `RUNNING` when the 90 seconds are up first. `CHECK_FAILED` means the status request failed, not that the job is still running; it keeps the wait going, and if it persists, run *Checking a job on the server* by hand to see the error. When it prints `ENDED`, read the results (*Reading results*, method 2).
@@ -92,7 +92,7 @@ Wherever this skill says `<job>`, take it from whichever shape certoraRun printe
 Ask the data API with `CERTORAKEY`, through the `prover-cli` that ships with autosetup. `<job>` is the job id in either form: the UUID from the app link, or the 32-hex `job_id` in `.certora_internal/.certora_recent_jobs.json`.
 
 ```bash
-"$(uv tool dir)"/ai-composer/bin/prover-cli --job-id <job> --status-only --format json
+prover-cli --job-id <job> --status-only --format json
 ```
 
 `SUCCEEDED` means the job finished and its verdicts are final. `FAILED`, `HALTED` (for example the `global_timeout` limit), `CANCELED`, `SERVICE_UNAVAILABLE` and `UPLOAD_FAILED` mean it ended without a full result. Any other status means it is still queued or running. If the command fails, the check failed: do not read it as "still running". `--full-report --format text` also prints the verdict counts.
@@ -124,7 +124,7 @@ For per-rule statuses and counterexamples:
    - Once the job has ended, read its verdicts and counterexamples, and save the full report next to the part's log:
 
      ```bash
-     "$(uv tool dir)"/ai-composer/bin/prover-cli --job-url <link> --verdicts \
+     prover-cli --job-url <link> --verdicts \
        --save-report certora/logs/<slug>-p<K>_run<N>.report.json
      ```
 
@@ -136,7 +136,7 @@ For per-rule statuses and counterexamples:
 3. **Local runs** (`--use-local-runner`-style setups / no cloud): results land in `emv-<N>-certora-<date>/Reports/` created in the directory certoraRun was invoked from (take the highest N); read that directory the same way:
 
      ```bash
-     "$(uv tool dir)"/ai-composer/bin/prover-cli --local-path emv-<N>-certora-<date>/ --verdicts
+     prover-cli --local-path emv-<N>-certora-<date>/ --verdicts
      ```
 
 ## Counterexample analysis (per violated rule)
