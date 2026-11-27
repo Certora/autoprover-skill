@@ -1,21 +1,21 @@
 # Hash collisions: which to assume away and which to report
 
-A hash collision is two different inputs with the same hash value. The work an attacker needs to find one decides whether you can assume it away. That work depends on two facts: how many bits of the hash the code keeps, and who chooses the inputs.
+A hash collision is two different inputs with the same hash value. The feasibility of finding such a collision determines whether you can assume the collision cannot happen. Feasibility depends on two facts: how many bits of the hash the code keeps, and who chooses the inputs.
 
 ## What the prover assumes
 
 The prover treats the full 256-bit `keccak256` as injective (distinct inputs give distinct outputs). A rule over full hashes never gets a collision counterexample, and needs no `require` against one.
 
-When the code keeps only part of a hash, that part is not injective. Examples are a cast to `uint128`, `bytes20` or `address`, a mask, a shift, and a `%`. The prover can then pick two inputs whose kept bits are equal. A counterexample that rests on such a pair is not spurious by default. It is a collision, and this file decides whether an attacker can find it.
+When the code keeps only part of a hash, that part is not injective. Examples are a cast to `uint128`, `bytes20` or `address`, a mask, a shift, and a `%`. The prover can then pick two inputs whose kept bits are equal. A counterexample that demonstrates such a pair is not spurious by default. It is a collision, and this file decides whether an attacker can find it.
 
 An encoding ambiguity is not a hash collision. Examples are `abi.encodePacked` over two dynamic values, or a key that leaves out a field that tells two records apart. The two inputs to the hash are then already the same bytes, so the collision costs nothing. Never assume it away.
 
-## The work an attacker needs
+## The different types of collisions and their feasibility
 
 For a hash that keeps `n` bits:
 
 - Collision (birthday bound): about 2^(n/2) hashes. If the attacker chooses both inputs, this bound applies.
-- Second preimage: about 2^n hashes. If the attacker must match an input that someone else chose and fixed first, this bound applies. If the attacker can match any one of 2^k such inputs, the work drops to about 2^(n-k).
+- Second preimage: about 2^n hashes. If the attacker must match an input that someone else chose and fixed first, this bound applies. If the attacker can match any one of 2^k, k<n such inputs, the work drops to about 2^(n-k).
 - Preimage (an input for a given hash value): about 2^n hashes.
 
 | Bits kept | Typical source | Collision | Second preimage |
@@ -51,7 +51,7 @@ If a key, an id or an address comes from part of a hash, ask two questions. Can 
 When a counterexample rests on two different inputs whose kept hash bits are equal, read the code that computes the key. Find how many bits it keeps, and which bound applies under *Which bound applies*.
 
 - At least 2^128: the collision is out of reach. Add a narrowly scoped `require` that the two specific inputs in the rule have different keys. Comment it with the bits kept, the bound, and the work. List it as a trust assumption.
-- Less than 2^128: this is a finding. Mark the rule expected-to-fail with the reason "reachable hash collision", and keep it with no collision `require`. You can add a companion rule that requires distinct keys and is VERIFIED. It shows that the collision is the only path to the violation.
+- Less than 2^128: this is a finding. Mark the rule expected-to-fail with the reason "reachable hash collision", and keep it without a no-collision `require`. You can add a companion rule that requires distinct keys and check if is VERIFIED. It would show that the collision is the only path to the violation.
 
 Never put a no-collision `require` in a shared helper or a `preserved` block where it covers rules you did not check against this file.
 
