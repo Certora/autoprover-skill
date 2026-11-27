@@ -13,7 +13,7 @@ compatibility: >-
   project is a pushed GitHub commit and the organization's balance covers it, and the hosted Timeout Resolver the skill can fall back
   on, the same key needs the Runs API permissions, and network access to app.certora.com.
 metadata:
-  version: "0.8.0"
+  version: "0.9.0"
   author: certora
 ---
 
@@ -60,7 +60,7 @@ Every phase writes its result under the project's `certora/` directory, so an in
 | `certora/analysis/method_difficulty.json`, `certora/specs/summaries/<Main>_difficulty_summaries.spec`, `certora/specs/summary-soundness.spec` + `certora/confs/summary-soundness.conf` | Phase 5 |
 | `certora/specs/invariants.spec` + `certora/confs/invariants.conf` (or one `invariants-<group>` pair per invariant unit) | Phase 6 |
 | `certora/specs/<slug>.spec`, `certora/confs/<slug>.conf`, `certora/properties/<slug>.property_rules.json`, `certora/properties/<slug>.commentary.md`, `certora/properties/<slug>.judge-round<N>.md` | Phase 6 |
-| `certora/report/report.json`, `certora/report/report.md` | Phase 7 |
+| `certora/report/report.json`, `certora/report/report.md`, `certora/report/findings.json` | Phase 7 |
 
 Create the artifact directories up front so a redirect or a write never fails on a missing parent: `mkdir -p certora/analysis certora/confs certora/specs/summaries certora/properties certora/report certora/logs certora/resolver certora/lean certora/propgen` (spelled out rather than brace-expanded, so it also works when the command runs under a plain POSIX shell).
 
@@ -93,7 +93,7 @@ Never block a single command on a whole run, and never re-run one just to see mo
 
 This skill is standalone: it needs nothing beyond the tools below. Fail fast with a specific message rather than improvising around a broken environment:
 
-- `certoraRun` and `certora-autosetup` on PATH (`which certoraRun certora-autosetup`), built from the AutoProver commit this skill pins. If they are missing or stale, you install them as described here. There is no separate installer. `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in both. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
+- `certoraRun`, `certora-autosetup` and `certora-findings-check` on PATH (`which certoraRun certora-autosetup certora-findings-check`), built from the AutoProver commit this skill pins. If they are missing or stale, you install them as described here. There is no separate installer. `certoraRun` comes from `pip install certora-cli`; `certora-autosetup` is the CLI of the `ai-composer` package (https://github.com/Certora/AutoProver), which is not published on PyPI. One uv command brings in all three: `certora-findings-check` is another CLI of `ai-composer`. `certora-cli` arrives through the `[certora-cli]` extra, and `--with-executables-from` is what puts its commands on PATH: `uv tool install` otherwise links only the console scripts of the package you named, not those of its dependencies.
 
   The ref is pinned because this skill describes autosetup flags and behaviour that move with it. It is the single line in `AUTOPROVER_REF.txt`, the file beside this one; read it and substitute it for `<ref>`:
 
@@ -111,7 +111,7 @@ This skill is standalone: it needs nothing beyond the tools below. Fail fast wit
 
   Before you install or reinstall, tell the user what you will install: `ai-composer` with `certora-cli` from the AutoProver repository at that commit, and later `solc-select` and the project's compilers. Say that uv builds it and that it takes a few minutes. Ask for their go-ahead, and install only after they agree. `uv` itself must already be on PATH. If it is not, stop and point the user at https://docs.astral.sh/uv/getting-started/installation/. Never download and run an installer yourself.
 
-  Then re-run `which certoraRun certora-autosetup`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. uv names the directory where it puts the tools, usually `~/.local/bin`. If that directory is not on PATH, use the full path for this session. Tell the user to add the directory to PATH. If the user declines or the install fails, stop and give the user the commands. Do not substitute or hand-roll a setup.
+  Then re-run `which certoraRun certora-autosetup certora-findings-check`. If uv reports that the executables already exist, a separate `certora-cli` tool owns those names: `uv tool uninstall certora-cli` first, or add `--force` to let uv take them over. uv names the directory where it puts the tools, usually `~/.local/bin`. If that directory is not on PATH, use the full path for this session. Tell the user to add the directory to PATH. If the user declines or the install fails, stop and give the user the commands. Do not substitute or hand-roll a setup.
 - `CERTORAKEY` set (cloud prover). No Anthropic key is required: **autosetup runs with `--skip-llm` by default in this flow**, which switches off every LLM call it would make.
 
   autosetup still reads `ANTHROPIC_API_KEY` while importing its summary module, and it checks only that the value is non-empty, never that it is a working key; a `.env` in the working directory is loaded instead and then nothing is checked at all. Nothing in this flow sends the value anywhere, so set the literal placeholder and move on. Do not read, copy or pass on whatever the user may already have in that variable:
@@ -400,7 +400,7 @@ Done means, for the spec that round produced: (a) the judge accepted it, (b) a f
 
 ## Phase 7 — Report
 
-Write `certora/report/report.json` and a human-readable `certora/report/report.md`:
+Write `certora/report/report.json` and a human-readable `certora/report/report.md`, then `certora/report/findings.json` (*Findings file* below):
 
 - Per property: title, sort, description, component, the rules that formalize it, and each rule's outcome mapped to GOOD (verified) / BAD (violated) / ERROR / TIMEOUT / UNKNOWN, plus the prover run link.
 - Group the properties into audit-style sections (roughly 8-25 for a real protocol; fewer is fine for small contracts) — each group one auditable claim with a short title and 1-3 sentence description; every property in exactly one group.
@@ -420,5 +420,25 @@ Write `certora/report/report.json` and a human-readable `certora/report/report.m
 - Method difficulty: the ranking from `certora/analysis/method_difficulty.json`, each summary Phase 5 added with the function it replaces, the sanity time before and after, and the status of its soundness rule. A summary is a trust assumption until its soundness rule is VERIFIED, so a reviewer needs to see both.
 - Property sources: when the hosted property generator ran, say which properties it produced and which the local round added, the properties it produced that Phase 4 dropped with the reason for each, its run id, and the amount it charged (`run.billing.charged_usd`). When it did not run, say why in one line.
 - Resolver hooks: for every rule the Timeout Resolver resolved, list the hooks it added, the lemma each one assumes, the Lean file that discharges it, and the resolver run id. They are trust assumptions with a certificate, and a reviewer needs to see them next to the bare `require`s.
+
+### Findings file
+
+`certora/report/findings.json` holds the findings and properties of the report as data, in the format `certora-autoprover-findings/1`. A report for the project's developers is built from it. `certora-findings-check --schema` prints the format's JSON Schema. Read it in full first: the `description` of every field is part of these instructions. The file records the run as it ended. Do not run new prover jobs, and do not change a verdict, finding, severity or trust class.
+
+- `run`. `source` is the project's repository (the URL of its `origin` remote) and the commit this run verified (`git rev-parse HEAD`). `results` is where this run's `certora/` directory is published: the repository and commit the user names. If the user named none, repeat `source.repository`, write 40 zeros as the commit, and tell the user it must be filled in once the results are committed. `certora_dir` is `certora/`. `skill_version` is the version in the frontmatter of this file. `property_generator_run_id` is the run id in `certora/propgen/run.json`, or null if the hosted generator did not run. `evaluation` is null.
+- `findings`. Every genuine-issue finding of the report, of all three trust classes, with its id from `report.json`. When a finding merges findings of several units, list them in `merged_from`. The `justification` fields hold only what the run established: the counterexample's values, the rule and its spec, the commentary, the judge's verdict. Where the run did not establish a point, such as how the pre-state is reached from deployment, say so in that field ("Not established by the run: the counterexample starts from an arbitrary state"). Do not fill it with an argument the run did not make. Give `recommendation` only if the report gives one.
+- `evidence`. For each finding, at least one property, with the rules of that property whose results show the finding, copied exactly from the property's `rules`. `how` says in one or two sentences what the result shows.
+- `properties`. Every property, including skipped ones and those Phase 4 dropped. Each lists every rule that formalises it, with its final result and the link to the final prover job for the rule's current text. A coverage-gap rule is not a finding: its property is `partial` or `not_proven`, and `status_note` says what is left out.
+- `models` and `gaps`. From the model ledgers in the commentaries, and from the report's lists of coverage gaps and narrower proofs.
+
+The text in this file is read by the project's developers. They know the code, but not this run. Write in the code's terms, without the vocabulary of the run:
+
+- No unit names, unit finding ids, ranks or property numbers. Name a property by its `id` and a finding by its title. Record merged unit findings in `merged_from`.
+- No history: no round, run or attempt numbers, job hashes, "carried from" or "closed after N fixes". Give the outcome only.
+- "Counterexample", not "CEX". "Verification setup", not "scene". State a limitation of the setup in plain words, not by a label.
+- No step names such as "judge". Say what was checked: "a separate check confirmed that the counterexample does not come from a model".
+- Write variable names out: `totalSupply = 18`, not `TS=18`.
+
+Then run `certora-findings-check certora/report/findings.json`. Fix every error, and run it again until it reports none. A warning marks a word from the run's vocabulary: reword the passage, unless the word is ordinary text there.
 
 Finish by telling the user: counts per outcome, suspected bugs (genuine-issue findings) first, `unprivileged` before `trusted_party` and `self_harm`, then prover-limitation gaps and skips with reasons, and links to the prover runs.
