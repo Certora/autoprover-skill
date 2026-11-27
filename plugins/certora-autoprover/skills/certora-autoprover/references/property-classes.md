@@ -26,6 +26,8 @@ The tell is simple. You wrote the property by reading one function body. A prope
 
 **Who the attacker is allowed to be.** For each privileged action, who performs it, and does your rule's adversary respect that? The ordinary half is that an unprivileged caller cannot reach a privileged effect. The other half is a discipline on every adversarial rule. Constrain the adversary so that it does not hold the privileges the source grants to trusted parties. A counterexample where a trusted administrator attacks the system it administers is not a finding. It crowds out the real ones. Privilege transitions belong here, including a handover that leaves a required role with no holder.
 
+**Whether two inputs can share a key.** A key, an id or an address comes from part of a hash. Can two different inputs get the same key, and who gains if they do? This applies wherever the code casts, masks or shifts a hash before it uses the result as a key. `hash-collisions.md` gives the cost of each width and says when that cost is in reach.
+
 **How stale a value from elsewhere is allowed to be.** The component reads values from an oracle, another contract, another chain, or a cache. The component acts on such a value. How old is it allowed to be at that moment? What does its age cost? This applies to any read whose source updates independently of the call that reads it.
 
 **What a re-entering actor can do.** The component hands control to an address someone else controls. At that moment, which of its own invariants are temporarily false? Ask about state, not about code shape. "The transfer happens before the write" observes the implementation. The property is different: the invariant holds at the moment control leaves, or no re-entrant path exploits the gap.

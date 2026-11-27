@@ -17,7 +17,7 @@ with a reason. No formal-verification expertise needed.
 
 <p align="center">
   <a href="https://agentskills.io"><img src="https://img.shields.io/badge/SKILL.md-open_standard-blue?style=flat" alt="Agent Skills standard"></a>
-  <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.8.0-blue?style=flat" alt="version 0.8.0"></a>
+  <a href="plugins/certora-autoprover/skills/certora-autoprover/SKILL.md"><img src="https://img.shields.io/badge/version-0.8.1-blue?style=flat" alt="version 0.8.1"></a>
   <a href="plugins/certora-autoprover-solana/skills/certora-autoprover-solana/SKILL.md"><img src="https://img.shields.io/badge/version-0.2.1-blue?style=flat" alt="Solana version 0.2.1"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-lightgrey?style=flat" alt="GPL-3.0-only"></a>
   <a href="https://github.com/crytic/solc-select"><img src="https://img.shields.io/badge/compilers-solc--select-blue?style=flat" alt="compilers managed by solc-select"></a>
